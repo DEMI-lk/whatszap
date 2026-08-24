@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'" />
+  <title>WhatsZAP</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header id="topbar">
+    <div class="drag"></div>
+    <div class="brand">
+      <img src="../assets/icon.png" alt="" draggable="false" />
+      <span>WhatsZAP</span>
+    </div>
+    <div class="spacer drag"></div>
+    <nav id="topmenu">
+      <button id="btn-profile-menu" title="Profiles">Profile &#9662;</button>
+      <button id="btn-settings" title="Settings">&#9881;</button>
+      <button id="btn-more" title="More">&#8942;</button>
+    </nav>
+  </header>
+
+  <div id="layout">
+    <aside id="rail">
+      <div id="rail-list" role="listbox" aria-label="WhatsApp profiles"></div>
+      <button id="btn-add-profile" title="New profile">+</button>
+    </aside>
+    <main id="content">
+      <div id="loading-hint">
+        <div class="spinner"></div>
+        <p>Loading WhatsApp Web…</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- Dropdown menus -->
+  <div id="profile-menu" class="menu hidden">
+    <div class="menu-list" id="profile-menu-list"></div>
+    <hr />
+    <button id="menu-new-profile" class="danger-none">New profile…</button>
+  </div>
+
+  <div id="more-menu" class="menu hidden">
+    <button id="menu-reload">Reload</button>
+    <button id="menu-devtools">Developer Tools</button>
+    <hr />
+    <div class="res-chip" id="app-version">WhatsZAP</div>
+    <div class="res-chip" id="res-chip">RAM – MB · CPU –%</div>
+    <hr />
+    <button id="menu-exit" class="danger">Exit</button>
+  </div>
+
+  <!-- Modals -->
+  <div id="modal-backdrop" class="hidden">
+    <div id="modal" role="dialog" aria-modal="true">
+      <h3 id="modal-title">New profile</h3>
+
+      <section data-panel="name">
+        <label for="input-name">Profile name</label>
+        <input id="input-name" maxlength="24" autocomplete="off" spellcheck="false" />
+      </section>
+
+      <section data-panel="settings">
+        <h4>General</h4>
+        <label class="row">
+          <input type="checkbox" id="set-startup" />
+          Start with Windows
+        </label>
+        <p class="hint">Starts hidden in the tray when you sign in.</p>
+
+        <h4>Profiles</h4>
+        <div class="row"><span>Maximum profiles</span><b id="set-max-profiles">10</b></div>
+        <p class="hint">
+          Sleep profiles do not receive background notifications. Right-click a
+          profile circle and choose "Keep alive" — or pop it out into its own
+          window — to keep that account live.
+        </p>
+
+        <h4>Performance</h4>
+        <div class="row">
+          <span>RAM limit (MB)</span>
+          <input type="number" id="set-ram" min="512" max="8192" step="128" />
+        </div>
+        <div class="row">
+          <span>CPU target (%)</span>
+          <input type="number" id="set-cpu" min="5" max="100" step="1" />
+        </div>
+
+        <h4>Background</h4>
+        <label class="row">
+          <input type="checkbox" id="set-background" />
+          Enable background mode
+        </label>
+        <p class="hint" id="set-background-state"></p>
+
+        <h4>Updates</h4>
+        <div class="row"><span>App version</span><b id="upd-version">–</b></div>
+        <div class="row">
+          <span>Updates folder</span>
+          <input type="text" id="upd-dir" style="width: 190px" spellcheck="false" />
+        </div>
+        <div class="row">
+          <button id="upd-check">Check for updates</button>
+          <button id="upd-install" class="primary" disabled>Install &amp; restart</button>
+        </div>
+        <p class="hint" id="upd-status">
+          Drop a newer build's latest.yml + Setup exe into the folder above
+          (local disk or network share), then check.
+        </p>
+      </section>
+
+      <footer>
+        <button id="modal-cancel">Cancel</button>
+        <button id="modal-ok" class="primary">OK</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Circle context menu -->
+  <div id="circle-menu" class="menu hidden">
+    <button data-action="keepalive">Keep alive</button>
+    <button data-action="popout">Pop out window</button>
+    <button data-action="popin">Close pop-out window</button>
+    <hr />
+    <button data-action="rename">Rename…</button>
+    <button data-action="avatar">Change avatar…</button>
+    <button data-action="avatar-remove">Remove avatar</button>
+    <hr />
+    <button data-action="delete" class="danger">Delete profile…</button>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
