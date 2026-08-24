@@ -32,7 +32,7 @@ const store = new ProfileStore(path.join(app.getPath('userData'), 'config', 'pro
 const windows = new WindowManager();
 const sessionManager = new SessionManager(profilesRoot);
 const webviews = new WebviewManager(() => windows.window, sessionManager);
-const notifications = new NotificationManager(() => windows.window);
+const notifications = new NotificationManager();
 
 let resources: ResourceManager;
 

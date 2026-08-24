@@ -11,7 +11,6 @@ export class ProfileSession {
   state: ProfileState = 'destroyed';
   unread = 0;
   lastActiveAt = 0;
-  lastUnreadNotifiedAt = 0;
 
   constructor(public readonly meta: ProfileMeta) {}
 

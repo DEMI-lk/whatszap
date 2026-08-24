@@ -37,6 +37,10 @@ export class PopoutManager {
     entry.win.focus();
   }
 
+  isFocused(profileId: string): boolean {
+    return this.entries.get(profileId)?.win.isFocused() ?? false;
+  }
+
   open(profileId: string, view: WebContentsView, title: string, prevKeepAlive: boolean): void {
     if (this.entries.has(profileId)) {
       this.focus(profileId);

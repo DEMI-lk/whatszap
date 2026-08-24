@@ -4,6 +4,24 @@ All notable changes to WhatsZAP are documented here.
 The app version lives in `package.json`; the installed build reports it in
 Settings → Updates and in the ⋮ menu.
 
+## 1.2.1 — 2026-08-24
+
+### Fixed
+- **Duplicate notifications for a single message.** Two native toasts used to
+  appear: WhatsApp Web's own page notification, plus a WhatsZAP aggregate
+  toast from the unread-count watcher. The page's `Notification` API is now
+  replaced by a sandboxed capture shim inside the WhatsApp view — its
+  sender/content data feeds **one** unified WhatsZAP toast, and the session
+  denies the `notifications` permission so no other path (including
+  ServiceWorker notifications) can reach the OS.
+- Unified toast format: **profile name** (title) / **sender's name** /
+  **message content**. Clicking it focuses the profile's window (pop-out or
+  main shell) and switches to it.
+
+### Changed
+- WhatsApp views now run with `contextIsolation: false` (still sandboxed,
+  zero Node access) so the notification shim can patch the page world.
+
 ## 1.2.0 — 2026-08-24
 
 ### Added

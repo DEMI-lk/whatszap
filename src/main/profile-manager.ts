@@ -82,6 +82,13 @@ export class ProfileManager {
     ipcMain.handle(IPC.toggleDevTools, () => this.webviews.toggleDevToolsActive());
     ipcMain.handle(IPC.setViewVisible, (_e, visible: boolean) => this.webviews.setActiveVisible(visible));
     ipcMain.handle(IPC.exitApp, () => this.forceExit());
+    ipcMain.on('whatszap:page-notification', (event, payload) => {
+      try {
+        this.onPageNotification(event as Electron.IpcMainEvent, payload);
+      } catch (err) {
+        console.error('[notifications] page notification failed:', err);
+      }
+    });
   }
 
   /** Restores last active profile after boot; first run auto-creates one. */
@@ -439,6 +446,58 @@ export class ProfileManager {
   /** Wired by main.ts so Exit cooperates with background-mode interception. */
   exitHook: () => void = () => app.exit(0);
 
+  // ------------------------------------------------------- notification path
+
+  /** Per-profile burst guard for unified message toasts. */
+  private readonly lastNotifyAt = new Map<string, number>();
+
+  /**
+   * Single notification source: the page's Notification calls are captured
+   * by the shim preload and arrive here with sender (title) + content
+   * (body). WhatsZAP attaches the profile name and shows exactly one toast.
+   */
+  private onPageNotification(
+    event: Electron.IpcMainEvent,
+    payload: { title?: unknown; body?: unknown },
+  ): void {
+    const profileId = this.webviews.profileIdByWebContents(event.sender.id);
+    if (!profileId) return;
+    const rec = this.sessionsMap.get(profileId);
+    if (!rec) return;
+
+    // Suppress only when the user is actively looking at this profile.
+    if (this.activeId === profileId && this.window()?.isFocused()) return;
+    if (this.popouts?.isPopped(profileId) && this.popouts.isFocused(profileId)) return;
+
+    const now = Date.now();
+    const last = this.lastNotifyAt.get(profileId) ?? 0;
+    if (now - last < 1000) return; // burst guard for rapid message runs
+    this.lastNotifyAt.set(profileId, now);
+
+    const sender = typeof payload?.title === 'string' && payload.title.trim()
+      ? payload.title.trim().slice(0, 100)
+      : 'New message';
+    const content = typeof payload?.body === 'string' ? payload.body.trim().slice(0, 200) : '';
+
+    this.notifications.showIncoming(rec.meta.name, sender, content, () =>
+      this.focusProfile(profileId),
+    );
+  }
+
+  /** Notification click: focus the popped window or the shell on profile. */
+  private focusProfile(id: string): void {
+    if (this.popouts?.isPopped(id)) {
+      this.popouts.focus(id);
+      return;
+    }
+    const win = this.window();
+    if (win) {
+      win.show();
+      win.focus();
+    }
+    if (this.activeId !== id) void this.select(id);
+  }
+
   // ----------------------------------------------------------------- private
 
   private suspend(rec: ProfileSession): void {
@@ -488,17 +547,8 @@ export class ProfileManager {
     const rec = this.sessionsMap.get(profileId);
     if (!rec) return;
     rec.unread = unread;
-    if (
-      unread > 0 &&
-      rec.state === 'suspended' &&
-      rec.lastUnreadNotifiedAt === 0 &&
-      this.settings().backgroundMode
-    ) {
-      rec.lastUnreadNotifiedAt = Date.now();
-      this.notifications.showProfileUnread(rec.meta.name, unread);
-    }
-    if (unread === 0) rec.lastUnreadNotifiedAt = 0;
-    else setTimeout(() => (rec.lastUnreadNotifiedAt = 0), 5 * 60_000).unref?.();
+    // NOTE: notifications are NOT raised here anymore — the shim-captured
+    // page notification (onPageNotification) is the single toast source.
     this.emitSnapshotThrottled();
   }
 

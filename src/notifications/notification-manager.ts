@@ -1,30 +1,35 @@
-import { Notification, BrowserWindow } from 'electron';
+import { Notification } from 'electron';
 import { NotificationProvider } from './providers/notification-provider';
 import { getPlatform } from '../platform';
 
 /**
  * Thin facade over platform notification providers. V1 ships only the
  * Windows provider; Linux/macOS providers are placeholders.
+ *
+ * Single source of truth for incoming-message toasts: built from the page's
+ * captured notification data (sender + content) plus the WhatsZAP profile
+ * name, formatted as:
+ *   title: <profile name>
+ *   body:  <sender's name>\n<content>
  */
 export class NotificationManager {
   private provider: NotificationProvider;
 
-  constructor(private readonly getWindow: () => BrowserWindow | null) {
+  constructor() {
     this.provider = getPlatform().createNotificationProvider();
   }
 
-  showProfileUnread(profileName: string, unread: number): void {
+  showIncoming(
+    profileName: string,
+    sender: string,
+    content: string,
+    onClick: () => void,
+  ): void {
     if (!Notification.isSupported()) return;
-    const win = this.getWindow();
-    // Never toast for the profile the user is looking at.
-    if (win?.isFocused()) return;
     this.provider.show({
-      title: 'WhatsZAP',
-      body: `${profileName}: ${unread} new message${unread === 1 ? '' : 's'}`,
-      onClick: () => {
-        win?.show();
-        win?.focus();
-      },
+      title: profileName,
+      body: `${sender}\n${content}`,
+      onClick,
     });
   }
 }

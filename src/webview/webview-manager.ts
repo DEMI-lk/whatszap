@@ -1,4 +1,5 @@
 import { BrowserWindow, shell, WebContentsView } from 'electron';
+import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { ContentBounds, WHATSAPP_URL } from '../shared/types';
 import { SessionManager } from './session-manager';
@@ -15,6 +16,8 @@ export interface WebViewEvents {
  */
 export class WebviewManager extends EventEmitter {
   private readonly views = new Map<string, WebContentsView>();
+  /** Reverse lookup: webContents id -> profile id (notification routing). */
+  private readonly wcProfile = new Map<number, string>();
   private attachedId: string | null = null;
   private bounds: ContentBounds = { x: 0, y: 0, width: 0, height: 0 };
   private hasRealBounds = false;
@@ -42,15 +45,20 @@ export class WebviewManager extends EventEmitter {
       view = new WebContentsView({
         webPreferences: {
           session: ses,
-          contextIsolation: true,
+          // contextIsolation must stay OFF here so the notification-shim
+          // preload can replace window.Notification in the page's world.
+          // The view remains sandboxed with zero Node access; the shim only
+          // forwards plain strings over IPC.
+          contextIsolation: false,
           nodeIntegration: false,
           sandbox: true,
-          // No preload: WhatsApp Web gets zero privileged API surface.
+          preload: path.join(__dirname, '..', 'preload', 'whatsapp-preload.js'),
           backgroundThrottling: true,
         },
       });
       const wc = view.webContents;
       wc.setUserAgent(ses.getUserAgent());
+      this.wcProfile.set(wc.id, profileId);
 
       wc.setWindowOpenHandler(({ url }) => {
         if (url.startsWith('http')) shell.openExternal(url);
@@ -66,6 +74,7 @@ export class WebviewManager extends EventEmitter {
       wc.on('render-process-gone', (_e, details) => {
         // A crashed renderer must not take the whole profile state machine down.
         console.error(`[webview] renderer gone (${profileId}):`, details.reason);
+        this.wcProfile.delete(wc.id);
         if (this.attachedId === profileId) {
           this.detach();
         }
@@ -146,6 +155,7 @@ export class WebviewManager extends EventEmitter {
     if (this.attachedId === profileId) this.attachedId = null;
     this.views.delete(profileId);
     const wc = view.webContents;
+    this.wcProfile.delete(wc.id);
     wc.removeAllListeners();
     try {
       // `close()` ends the page like closing a browser tab; fall back to GC
@@ -192,6 +202,11 @@ export class WebviewManager extends EventEmitter {
 
   allIds(): string[] {
     return [...this.views.keys()];
+  }
+
+  /** Which profile owns this webContents (null if unknown/untracked). */
+  profileIdByWebContents(wcId: number): string | null {
+    return this.wcProfile.get(wcId) ?? null;
   }
 
   private applyBounds(view: WebContentsView): void {

@@ -66,7 +66,10 @@ export class SessionManager {
     });
 
     // Treat WhatsApp Web as untrusted content: deny everything not required.
-    const allowed = new Set(['media', 'notifications', 'fullscreen', 'pointerLock', 'clipboard-sanitized-write']);
+    // NOTE: 'notifications' is intentionally DENIED — the notification shim
+    // preload captures page notifications for the unified WhatsZAP toast,
+    // and denial also blocks any ServiceWorker showNotification leak.
+    const allowed = new Set(['media', 'fullscreen', 'pointerLock', 'clipboard-sanitized-write']);
     ses.setPermissionRequestHandler((_wc, permission, callback) => {
       callback(allowed.has(permission));
     });
