@@ -107,13 +107,18 @@ export class LocalUpdater {
       this.setStatus({ state: 'installing', message: `Installing ${this.pending.version}…` });
       console.info(`[updater] launching silent install of ${this.pending.version}`);
 
-      const child = spawn(target, ['/S', '--force-run'], {
+      const child = spawn('cmd.exe', [
+        '/d', '/s', '/c',
+        `timeout /t 3 /nobreak >nul && "${target}" /S --force-run`,
+      ], {
         detached: true,
         stdio: 'ignore',
+        windowsHide: true,
       });
       child.unref();
-      // Give the installer a moment to take over, then leave cleanly.
-      setTimeout(() => this.exitApp(), 800).unref?.();
+      // The detached wrapper waits for this process to fully exit before
+      // running the installer, so no file locks can break the silent setup.
+      setTimeout(() => this.exitApp(), 500).unref?.();
     } catch (err) {
       this.setStatus({
         state: 'error',
