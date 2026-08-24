@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, WebContentsView } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, WebContentsView } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ContentBounds, IPC, IPC_EVENTS, MAX_PROFILES, ProfileInfo, ProfileMeta, Settings, WHATSAPP_URL } from '../shared/types';
@@ -66,6 +66,9 @@ export class ProfileManager {
       await this.deleteProfile(id);
     });
     ipcMain.handle(IPC.pickAvatar, (_e, id: string) => this.pickAvatar(id));
+    ipcMain.handle(IPC.setBuiltinAvatar, (_e, id: string, avatarId: string) => {
+      this.setBuiltinAvatar(id, avatarId);
+    });
     ipcMain.handle(IPC.removeAvatar, (_e, id: string) => {
       this.store.update(id, { avatar: null });
       this.emitSnapshot();
@@ -234,22 +237,65 @@ export class ProfileManager {
     const win = this.window();
     if (!win) return null;
     const result = await dialog.showOpenDialog(win, {
-      title: `Choose avatar for profile`,
+      title: 'Choose avatar image',
       filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
       properties: ['openFile'],
     });
     const file = result.filePaths[0];
     if (!file) return null;
+    return this.setCustomAvatar(id, file);
+  }
+
+  /**
+   * Center-crops the source image to a square and saves a 256x256 PNG copy
+   * inside the profile's own data directory, so the avatar survives the
+   * original file being moved/deleted. Animated sources become static.
+   */
+  setCustomAvatar(id: string, sourceFile: string): string | null {
+    const rec = this.sessionsMap.get(id);
+    if (!rec) return null;
+    const img = nativeImage.createFromPath(sourceFile);
+    if (img.isEmpty()) {
+      console.error(`[avatars] unreadable image: ${sourceFile}`);
+      return null;
+    }
+    const { width, height } = img.getSize();
+    const side = Math.min(width, height);
+    const cropped = img
+      .crop({
+        x: Math.floor((width - side) / 2),
+        y: Math.floor((height - side) / 2),
+        width: side,
+        height: side,
+      })
+      .resize({ width: 256, height: 256 });
+
     const dir = path.join(this.profilesRoot, id);
     fs.mkdirSync(dir, { recursive: true });
-    const ext = path.extname(file).toLowerCase() || '.png';
-    const dest = path.join(dir, `avatar${ext}`);
-    fs.copyFileSync(file, dest);
+    // Fixed name: replaces any previous custom avatar (old ext included).
+    for (const old of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+      if (/^avatar\./.test(old)) fs.rmSync(path.join(dir, old), { force: true });
+    }
+    const dest = path.join(dir, 'avatar.png');
+    fs.writeFileSync(dest, cropped.toPNG());
+
+    rec.meta.avatar = dest;
     this.store.update(id, { avatar: dest });
-    const rec = this.sessionsMap.get(id);
-    if (rec) rec.meta.avatar = dest;
     this.emitSnapshot();
     return dest;
+  }
+
+  /** Built-in avatar reference (builtin:1..8) — no image is copied. */
+  setBuiltinAvatar(id: string, avatarId: string): void {
+    const rec = this.sessionsMap.get(id);
+    if (!rec) return;
+    if (!/^builtin:[1-8]$/.test(avatarId)) {
+      console.warn(`[avatars] invalid builtin id: ${avatarId}`);
+      return;
+    }
+    rec.meta.avatar = avatarId;
+    this.store.update(id, { avatar: avatarId });
+    this.emitSnapshot();
   }
 
   setBounds(bounds: ContentBounds): void {
@@ -556,13 +602,34 @@ export class ProfileManager {
     return {
       id: rec.meta.id,
       name: rec.meta.name,
-      avatarDataUrl: readAvatarDataUrl(rec.meta.avatar),
+      avatarRaw: rec.meta.avatar,
+      avatarDataUrl: this.resolveAvatar(rec.meta.avatar),
       initials: initialsOf(rec.meta.name),
       state: rec.state,
       unread: rec.unread,
       keepAlive: rec.meta.keepAlive,
       poppedOut: this.popouts?.isPopped(rec.id) ?? false,
     };
+  }
+
+  /** Bundled built-in avatars, read once and cached as data URLs. */
+  private readonly builtinAvatarCache = new Map<string, string>();
+
+  private resolveAvatar(avatar: string | null): string | null {
+    if (!avatar) return null;
+    if (avatar.startsWith('builtin:')) {
+      const cached = this.builtinAvatarCache.get(avatar);
+      if (cached) return cached;
+      try {
+        const file = path.join(app.getAppPath(), 'assets', 'avatars', `${avatar.slice(8)}.png`);
+        const url = `data:image/png;base64,${fs.readFileSync(file).toString('base64')}`;
+        this.builtinAvatarCache.set(avatar, url);
+        return url;
+      } catch {
+        return null;
+      }
+    }
+    return readAvatarDataUrl(avatar);
   }
 
   private snapshot(): ProfileInfo[] {

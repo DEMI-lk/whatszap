@@ -15,6 +15,8 @@ export interface ProfileMeta {
 export interface ProfileInfo {
   id: string;
   name: string;
+  /** Raw avatar reference: null (initials), "builtin:N", or a file path. */
+  avatarRaw: string | null;
   avatarDataUrl: string | null;
   initials: string;
   state: ProfileState;
@@ -80,6 +82,7 @@ export const IPC = {
   popoutProfile: 'profiles:popout',
   popinProfile: 'profiles:popin',
   pickAvatar: 'profiles:pick-avatar',
+  setBuiltinAvatar: 'profiles:set-builtin-avatar',
   removeAvatar: 'profiles:remove-avatar',
   getSettings: 'settings:get',
   updateSettings: 'settings:update',

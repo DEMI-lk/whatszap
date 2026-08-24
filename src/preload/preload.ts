@@ -14,6 +14,7 @@ const IPC = {
   popoutProfile: 'profiles:popout',
   popinProfile: 'profiles:popin',
   pickAvatar: 'profiles:pick-avatar',
+  setBuiltinAvatar: 'profiles:set-builtin-avatar',
   removeAvatar: 'profiles:remove-avatar',
   getSettings: 'settings:get',
   updateSettings: 'settings:update',
@@ -48,6 +49,8 @@ const api = {
   popoutProfile: (id: string): Promise<void> => ipcRenderer.invoke(IPC.popoutProfile, id),
   popinProfile: (id: string): Promise<void> => ipcRenderer.invoke(IPC.popinProfile, id),
   pickAvatar: (id: string): Promise<string | null> => ipcRenderer.invoke(IPC.pickAvatar, id),
+  setBuiltinAvatar: (id: string, avatarId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.setBuiltinAvatar, id, avatarId),
   removeAvatar: (id: string): Promise<void> => ipcRenderer.invoke(IPC.removeAvatar, id),
 
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke(IPC.getSettings),

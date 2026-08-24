@@ -4,6 +4,18 @@ All notable changes to WhatsZAP are documented here.
 The app version lives in `package.json`; the installed build reports it in
 Settings → Updates and in the ⋮ menu.
 
+## 1.2.2 — 2026-08-24
+
+### Added
+- **Profile avatars.** Right-click a profile circle → "Change avatar…" opens a
+  picker with 8 bundled built-in avatars (geometric, offline), a custom image
+  upload (center-cropped to a 256×256 square and copied into the profile's
+  own data folder, so it survives moving/deleting the original), and
+  "Reset to initials". Profiles without an avatar keep showing initials.
+  Built-ins are stored as `builtin:N` references; custom images as processed
+  copies — both persist across restarts. Focus ring, Active/Sleep presence
+  dot, unread badge, and pop-out badge all layer above the avatar unchanged.
+
 ## 1.2.1 — 2026-08-24
 
 ### Fixed

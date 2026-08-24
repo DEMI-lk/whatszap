@@ -33,8 +33,10 @@ let profiles: ProfileInfo[] = [];
 let settings: AppSettings | null = null;
 let activeId: string | null = null;
 let circleMenuFor: string | null = null;
-let modalMode: 'new' | 'rename' | 'settings' = 'new';
+let modalMode: 'new' | 'rename' | 'settings' | 'avatar' = 'new';
 let renameTarget: string | null = null;
+let avatarTarget: string | null = null;
+const BUILTIN_AVATARS = ['builtin:1', 'builtin:2', 'builtin:3', 'builtin:4', 'builtin:5', 'builtin:6', 'builtin:7', 'builtin:8'];
 
 // ------------------------------------------------------------------- render
 
@@ -233,7 +235,7 @@ circleMenu.addEventListener('click', async (e) => {
   else if (action === 'popout') await api.popoutProfile(id);
   else if (action === 'popin') await api.popinProfile(id);
   else if (action === 'rename') openModal('rename', id);
-  else if (action === 'avatar') await api.pickAvatar(id);
+  else if (action === 'avatar') openModal('avatar', id);
   else if (action === 'avatar-remove') await api.removeAvatar(id);
   else if (action === 'delete') {
     if (p && confirm(`Delete "${p.name}" and its WhatsApp session data?\nThis cannot be undone.`)) {
@@ -244,15 +246,17 @@ circleMenu.addEventListener('click', async (e) => {
 
 // ------------------------------------------------------------------- modals
 
-function openModal(mode: 'new' | 'rename' | 'settings', targetId?: string): void {
+function openModal(mode: 'new' | 'rename' | 'settings' | 'avatar', targetId?: string): void {
   modalMode = mode;
   renameTarget = targetId ?? null;
+  avatarTarget = mode === 'avatar' ? targetId ?? null : null;
   backdrop.classList.remove('hidden');
   syncOverlay();
 
-  const isName = mode !== 'settings';
-  panelName.classList.toggle('hidden', !isName);
-  panelSettings.classList.toggle('hidden', isName);
+  panelName.classList.toggle('hidden', mode === 'settings' || mode === 'avatar');
+  panelSettings.classList.toggle('hidden', mode !== 'settings');
+  const panelAvatar = document.querySelector('[data-panel="avatar"]') as HTMLElement;
+  panelAvatar.classList.toggle('hidden', mode !== 'avatar');
 
   if (mode === 'new') {
     modalTitle.textContent = 'New profile';
@@ -265,10 +269,44 @@ function openModal(mode: 'new' | 'rename' | 'settings', targetId?: string): void
     inputName.value = p?.name ?? '';
     (document.getElementById('modal-ok') as HTMLButtonElement).textContent = 'Save';
     setTimeout(() => inputName.select(), 0);
+  } else if (mode === 'avatar') {
+    const p = profiles.find((x) => x.id === targetId);
+    modalTitle.textContent = `Avatar — ${p?.name ?? ''}`;
+    (document.getElementById('modal-ok') as HTMLButtonElement).textContent = 'Done';
+    renderAvatarGrid();
   } else {
     modalTitle.textContent = 'Settings';
     fillSettings();
     (document.getElementById('modal-ok') as HTMLButtonElement).textContent = 'Save';
+  }
+}
+
+function renderAvatarGrid(): void {
+  const grid = document.getElementById('avatar-grid') as HTMLDivElement;
+  grid.textContent = '';
+  const current = profiles.find((x) => x.id === avatarTarget);
+  const raw = current?.avatarRaw ?? null;
+
+  for (const id of BUILTIN_AVATARS) {
+    const btn = document.createElement('button');
+    btn.className = 'avatar-opt' + (raw === id ? ' selected' : '');
+    btn.title = 'Built-in avatar';
+    const img = document.createElement('img');
+    img.src = `../assets/avatars/${id.slice(8)}.png`;
+    img.alt = '';
+    btn.appendChild(img);
+    btn.addEventListener('click', async () => {
+      if (!avatarTarget) return;
+      await api.setBuiltinAvatar(avatarTarget, id);
+    });
+    grid.appendChild(btn);
+  }
+  if (raw && !raw.startsWith('builtin:')) {
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.style.width = '100%';
+    note.textContent = 'Using a custom uploaded image — "Reset to initials" or pick a built-in one above.';
+    grid.appendChild(note);
   }
 }
 
@@ -319,6 +357,8 @@ async function submitModal(): Promise<void> {
     if (created) activeId = created.id;
   } else if (modalMode === 'rename' && renameTarget) {
     await api.renameProfile(renameTarget, inputName.value.trim() || 'Profile');
+  } else if (modalMode === 'avatar') {
+    // Selections apply immediately from the grid/buttons; nothing to save.
   } else if (modalMode === 'settings') {
     settings = await api.updateSettings({
       startWithWindows: setStartup.checked,
@@ -341,6 +381,17 @@ document.getElementById('modal-ok')!.addEventListener('click', submitModal);
 backdrop.addEventListener('mousedown', (e) => { if (e.target === backdrop) closeModal(); });
 inputName.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitModal(); });
 setBackground.addEventListener('change', updateBackgroundHint);
+
+document.getElementById('avatar-upload')!.addEventListener('click', async () => {
+  if (!avatarTarget) return;
+  await api.pickAvatar(avatarTarget);
+  renderAvatarGrid();
+});
+document.getElementById('avatar-reset')!.addEventListener('click', async () => {
+  if (!avatarTarget) return;
+  await api.removeAvatar(avatarTarget);
+  renderAvatarGrid();
+});
 
 updDir.addEventListener('change', () => {
   void api.updateSettings({ updatesDir: updDir.value.trim() });
@@ -371,6 +422,7 @@ api.onSnapshot((list) => {
   activeId = current ? current.id : null;
   renderRail();
   loadingHint.style.opacity = activeId ? '0' : '1';
+  if (modalMode === 'avatar') renderAvatarGrid();
 });
 api.onResources((s: ResourceSample) => {
   resChip.textContent = `RAM ${s.totalRamMB}/${s.ramLimitMB} MB · CPU ${s.cpuPercent}%`;
