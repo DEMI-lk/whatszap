@@ -1,5 +1,13 @@
 # WhatsZAP
 
+> ## ⚠️ Disclaimer — read before using
+>
+> **This is a vibe-coded app without proper testing. Use it entirely at your own risk.**
+>
+> - Built with AI assistance: **Ox Alpha** (opencode, free tier) in roughly **2 days** — see the [changelog](CHANGELOG.md) for details.
+> - WhatsZAP is an unofficial client that simply hosts the official WhatsApp Web. It is **not affiliated with, endorsed by, or connected to WhatsApp/Meta** in any way. Use of WhatsApp Web remains subject to [WhatsApp's Terms of Service](https://www.whatsapp.com/legal/terms-of-service) — automated or modified clients can, in theory, violate them and put your account at risk.
+> - **Do NOT commit directly to this repo.** If you want to change or maintain the app, **fork it** and continue on your own copy. Issues and stars are welcome; direct pushes are reserved for the maintainer.
+
 Lightweight, open-source **Electron desktop client for WhatsApp Web** with
 multiple isolated, persistent profiles. Windows-first (Linux/macOS ready via a
 platform abstraction layer). Inspired by Linux clients like ZapZap.
