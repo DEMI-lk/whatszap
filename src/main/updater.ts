@@ -104,20 +104,29 @@ export class LocalUpdater {
         throw new Error('Installer checksum mismatch — file corrupted or tampered.');
       }
 
+      // Remove Mark-of-the-Web (Zone.Identifier) so SmartScreen doesn't block
+      // installers that were downloaded via a browser.
+      try {
+        fs.unlinkSync(`${target}:Zone.Identifier`);
+      } catch {
+        /* no MotW present — fine */
+      }
+
       this.setStatus({ state: 'installing', message: `Installing ${this.pending.version}…` });
       console.info(`[updater] launching silent install of ${this.pending.version}`);
 
+      // `ping` delay (NOT `timeout`, which fails under redirected stdin) —
+      // the detached wrapper waits for this process to fully exit before
+      // running the installer, avoiding file-lock races.
+      const script = `ping -n 4 127.0.0.1 >nul && "${target}" /S --force-run`;
       const child = spawn('cmd.exe', [
-        '/d', '/s', '/c',
-        `timeout /t 3 /nobreak >nul && "${target}" /S --force-run`,
+        '/d', '/s', '/c', script,
       ], {
         detached: true,
         stdio: 'ignore',
         windowsHide: true,
       });
       child.unref();
-      // The detached wrapper waits for this process to fully exit before
-      // running the installer, so no file locks can break the silent setup.
       setTimeout(() => this.exitApp(), 500).unref?.();
     } catch (err) {
       this.setStatus({
