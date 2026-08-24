@@ -1,4 +1,30 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 release/
 *.tsbuildinfo
+
+# Environment / local config
+.env
+.env.*
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Editor / OS noise
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp
+tmp/
+temp/
+*.tmp
