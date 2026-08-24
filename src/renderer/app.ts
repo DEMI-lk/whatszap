@@ -36,7 +36,30 @@ let circleMenuFor: string | null = null;
 let modalMode: 'new' | 'rename' | 'settings' | 'avatar' = 'new';
 let renameTarget: string | null = null;
 let avatarTarget: string | null = null;
-const BUILTIN_AVATARS = ['builtin:1', 'builtin:2', 'builtin:3', 'builtin:4', 'builtin:5', 'builtin:6', 'builtin:7', 'builtin:8'];
+let builtinAvatarIds: string[] = [];
+const ACCENT_PALETTE = ['#00a884', '#3390ec', '#7c66dc', '#e542a3', '#f15c6d', '#ff9c3f', '#00b7c3', '#f2c33d'];
+
+function applyAccent(color: string): void {
+  document.documentElement.style.setProperty('--accent', color);
+}
+
+function renderPalette(): void {
+  const pal = document.getElementById('accent-palette') as HTMLDivElement;
+  pal.textContent = '';
+  const current = (settings?.accentColor ?? '#00a884').toLowerCase();
+  for (const c of ACCENT_PALETTE) {
+    const b = document.createElement('button');
+    b.className = 'swatch' + (c.toLowerCase() === current ? ' selected' : '');
+    b.style.background = c;
+    b.title = c;
+    b.addEventListener('click', async () => {
+      settings = await api.updateSettings({ accentColor: c });
+      applyAccent(c);
+      renderPalette();
+    });
+    pal.appendChild(b);
+  }
+}
 
 // ------------------------------------------------------------------- render
 
@@ -287,7 +310,7 @@ function renderAvatarGrid(): void {
   const current = profiles.find((x) => x.id === avatarTarget);
   const raw = current?.avatarRaw ?? null;
 
-  for (const id of BUILTIN_AVATARS) {
+  for (const id of builtinAvatarIds) {
     const btn = document.createElement('button');
     btn.className = 'avatar-opt' + (raw === id ? ' selected' : '');
     btn.title = 'Built-in avatar';
@@ -324,6 +347,7 @@ function fillSettings(): void {
   setBackground.checked = settings.backgroundMode;
   updDir.value = settings.updatesDir || '';
   updateBackgroundHint();
+  renderPalette();
   void refreshUpdaterInfo();
 }
 
@@ -444,24 +468,17 @@ function cycleProfile(dir: 1 | -1): void {
 
 btnAdd.addEventListener('click', () => openModal('new'));
 
-// Double-click a circle to rename.
-railList.addEventListener('dblclick', (e) => {
-  const circle = (e.target as HTMLElement).closest('.circle');
-  if (!circle) return;
-  const idx = Array.from(railList.children).indexOf(circle);
-  const p = profiles[idx];
-  if (p) openModal('rename', p.id);
-});
-
 // -------------------------------------------------------------------- boot
 
 (async function boot() {
   settings = await api.getSettings();
+  applyAccent(settings.accentColor || '#00a884');
   profiles = await api.getProfiles();
   const current = profiles.find((p) => p.state === 'active');
   activeId = current ? current.id : null;
   renderRail();
   reportBounds();
+  builtinAvatarIds = await api.listAvatars();
   void refreshUpdaterInfo();
 
   // Poll resources lightly so the chip stays fresh even without pressure.

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, WebContentsView } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, WebContentsView } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ContentBounds, IPC, IPC_EVENTS, MAX_PROFILES, ProfileInfo, ProfileMeta, Settings, WHATSAPP_URL } from '../shared/types';
@@ -46,6 +46,8 @@ export class ProfileManager {
     webviews.on('unread-changed', (profileId: string, unread: number) => {
       this.onUnreadChanged(profileId, unread);
     });
+
+    this.loadBuiltinAvatars();
   }
 
   setPopouts(popouts: PopoutManager): void {
@@ -69,6 +71,7 @@ export class ProfileManager {
     ipcMain.handle(IPC.setBuiltinAvatar, (_e, id: string, avatarId: string) => {
       this.setBuiltinAvatar(id, avatarId);
     });
+    ipcMain.handle(IPC.avatarsList, () => this.listBuiltinAvatars());
     ipcMain.handle(IPC.removeAvatar, (_e, id: string) => {
       this.store.update(id, { avatar: null });
       this.emitSnapshot();
@@ -247,37 +250,26 @@ export class ProfileManager {
   }
 
   /**
-   * Center-crops the source image to a square and saves a 256x256 PNG copy
-   * inside the profile's own data directory, so the avatar survives the
-   * original file being moved/deleted. Animated sources become static.
+   * Copies the source image VERBATIM into the profile's own data directory
+   * (no cropping/resampling — the circle renders the whole image), so the
+   * avatar survives the original file being moved/deleted.
    */
   setCustomAvatar(id: string, sourceFile: string): string | null {
     const rec = this.sessionsMap.get(id);
     if (!rec) return null;
-    const img = nativeImage.createFromPath(sourceFile);
-    if (img.isEmpty()) {
-      console.error(`[avatars] unreadable image: ${sourceFile}`);
+    if (!fs.existsSync(sourceFile)) {
+      console.error(`[avatars] missing image: ${sourceFile}`);
       return null;
     }
-    const { width, height } = img.getSize();
-    const side = Math.min(width, height);
-    const cropped = img
-      .crop({
-        x: Math.floor((width - side) / 2),
-        y: Math.floor((height - side) / 2),
-        width: side,
-        height: side,
-      })
-      .resize({ width: 256, height: 256 });
-
     const dir = path.join(this.profilesRoot, id);
     fs.mkdirSync(dir, { recursive: true });
-    // Fixed name: replaces any previous custom avatar (old ext included).
+    // Fixed base name: replaces any previous custom avatar (old ext included).
     for (const old of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
       if (/^avatar\./.test(old)) fs.rmSync(path.join(dir, old), { force: true });
     }
-    const dest = path.join(dir, 'avatar.png');
-    fs.writeFileSync(dest, cropped.toPNG());
+    const ext = (path.extname(sourceFile).toLowerCase() || '.png').slice(0, 5);
+    const dest = path.join(dir, `avatar${ext}`);
+    fs.copyFileSync(sourceFile, dest);
 
     rec.meta.avatar = dest;
     this.store.update(id, { avatar: dest });
@@ -285,11 +277,11 @@ export class ProfileManager {
     return dest;
   }
 
-  /** Built-in avatar reference (builtin:1..8) — no image is copied. */
+  /** Built-in avatar reference (builtin:<n>) — no image is copied. */
   setBuiltinAvatar(id: string, avatarId: string): void {
     const rec = this.sessionsMap.get(id);
     if (!rec) return;
-    if (!/^builtin:[1-8]$/.test(avatarId)) {
+    if (!this.builtinIds.includes(avatarId)) {
       console.warn(`[avatars] invalid builtin id: ${avatarId}`);
       return;
     }
@@ -612,8 +604,27 @@ export class ProfileManager {
     };
   }
 
-  /** Bundled built-in avatars, read once and cached as data URLs. */
+  /** Bundled built-in avatars, discovered once from assets/avatars/*.png. */
+  private builtinIds: string[] = [];
   private readonly builtinAvatarCache = new Map<string, string>();
+
+  private loadBuiltinAvatars(): void {
+    try {
+      const dir = path.join(app.getAppPath(), 'assets', 'avatars');
+      this.builtinIds = fs
+        .readdirSync(dir)
+        .filter((f) => /^\d+\.png$/.test(f))
+        .map((f) => `builtin:${parseInt(f, 10)}`)
+        .sort((a, b) => parseInt(a.slice(8), 10) - parseInt(b.slice(8), 10));
+    } catch {
+      this.builtinIds = [];
+    }
+    console.info(`[avatars] ${this.builtinIds.length} built-in avatars available`);
+  }
+
+  listBuiltinAvatars(): string[] {
+    return [...this.builtinIds];
+  }
 
   private resolveAvatar(avatar: string | null): string | null {
     if (!avatar) return null;

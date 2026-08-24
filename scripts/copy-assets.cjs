@@ -21,6 +21,7 @@ if (fs.existsSync(path.join(assetsSrc, 'icon.png'))) {
 const avatarsSrc = path.join(assetsSrc, 'avatars');
 if (fs.existsSync(avatarsSrc)) {
   const avatarsOut = path.join(assetsOut, 'avatars');
+  fs.rmSync(avatarsOut, { recursive: true, force: true });
   fs.mkdirSync(avatarsOut, { recursive: true });
   for (const f of fs.readdirSync(avatarsSrc)) {
     if (/\.png$/.test(f)) fs.copyFileSync(path.join(avatarsSrc, f), path.join(avatarsOut, f));

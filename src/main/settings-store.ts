@@ -10,6 +10,7 @@ const DEFAULTS: AppSettings = {
   startWithWindows: false,
   activeProfileId: null,
   updatesDir: '',
+  accentColor: '#00a884',
 };
 
 /** Tiny atomic-JSON settings store (config/settings.json). */

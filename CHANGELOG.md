@@ -8,13 +8,25 @@ Settings → Updates and in the ⋮ menu.
 
 ### Added
 - **Profile avatars.** Right-click a profile circle → "Change avatar…" opens a
-  picker with 8 bundled built-in avatars (geometric, offline), a custom image
-  upload (center-cropped to a 256×256 square and copied into the profile's
-  own data folder, so it survives moving/deleting the original), and
-  "Reset to initials". Profiles without an avatar keep showing initials.
-  Built-ins are stored as `builtin:N` references; custom images as processed
-  copies — both persist across restarts. Focus ring, Active/Sleep presence
-  dot, unread badge, and pop-out badge all layer above the avatar unchanged.
+  picker with the bundled built-in set (70 illustrated avatars, fully
+  offline), a custom image upload, and "Reset to initials".
+- Custom images are stored verbatim inside the profile's own data folder
+  (never cropped — the full image renders in the circle), so they survive
+  moving/deleting the original file. Built-ins are stored as `builtin:N`
+  references. Both persist across restarts.
+- **Accent color palette** (Settings → Appearance): 8 accent colors; the
+  focus ring glow, presence dots, spinner, checkboxes, and primary buttons
+  all follow. Persisted.
+- UI polish: slim dark scrollbars app-wide, themed modal buttons, checkbox
+  layout fixes.
+
+### Removed
+- Double-click-to-rename on profile circles (annoying; rename lives in the
+  right-click menu).
+
+### Changed
+- All circle indicators (focus ring, Active/Sleep presence dot, unread
+  badge, pop-out badge) layer above avatar images unchanged.
 
 ## 1.2.1 — 2026-08-24
 

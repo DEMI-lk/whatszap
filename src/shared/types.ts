@@ -34,6 +34,8 @@ export interface AppSettings {
   activeProfileId: string | null;
   /** Folder scanned for latest.yml + Setup exe. Empty = userData/updates. */
   updatesDir: string;
+  /** UI accent color (hex). */
+  accentColor: string;
 }
 
 export type UpdaterState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'installing' | 'error';
@@ -83,6 +85,7 @@ export const IPC = {
   popinProfile: 'profiles:popin',
   pickAvatar: 'profiles:pick-avatar',
   setBuiltinAvatar: 'profiles:set-builtin-avatar',
+  avatarsList: 'avatars:list',
   removeAvatar: 'profiles:remove-avatar',
   getSettings: 'settings:get',
   updateSettings: 'settings:update',

@@ -63,7 +63,7 @@
       </section>
 
       <section data-panel="avatar">
-        <p class="hint">Pick a built-in avatar, upload a custom image (center-cropped to the circle), or reset to initials.</p>
+        <p class="hint">Pick a built-in avatar, upload a custom image (shown in full, never cropped), or reset to initials.</p>
         <div id="avatar-grid"></div>
         <div class="row" style="justify-content: flex-start; gap: 8px;">
           <button id="avatar-upload">Upload custom image…</button>
@@ -72,6 +72,9 @@
       </section>
 
       <section data-panel="settings">
+        <h4>Appearance</h4>
+        <div id="accent-palette"></div>
+
         <h4>General</h4>
         <label class="row">
           <input type="checkbox" id="set-startup" />
