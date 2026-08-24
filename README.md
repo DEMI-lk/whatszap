@@ -8,6 +8,16 @@
 > - WhatsZAP is an unofficial client that simply hosts the official WhatsApp Web. It is **not affiliated with, endorsed by, or connected to WhatsApp/Meta** in any way. Use of WhatsApp Web remains subject to [WhatsApp's Terms of Service](https://www.whatsapp.com/legal/terms-of-service) — automated or modified clients can, in theory, violate them and put your account at risk.
 > - **Do NOT commit directly to this repo.** If you want to change or maintain the app, **fork it** and continue on your own copy. Issues and stars are welcome; direct pushes are reserved for the maintainer.
 
+> ### 🔒 Unsigned builds — Windows may warn or block installation
+>
+> WhatsZAP's installers are **not code-signed** (signing certificates cost real money for a free project). Consequences on Windows:
+>
+> - **SmartScreen** shows *"Windows protected your PC"* on first run — click **More info → Run anyway**.
+> - **Smart App Control** (Windows 11, if enabled) blocks unsigned apps entirely — the app will not install while it is on.
+> - Some antivirus products may flag the unsigned installer or the self-update flow.
+>
+> The app itself is open source — you can audit the code and build it yourself with `npm install && npm run dist`. Code signing is planned once the project can justify the certificate cost; the build pipeline is already signing-ready.
+
 Lightweight, open-source **Electron desktop client for WhatsApp Web** with
 multiple isolated, persistent profiles. Windows-first (Linux/macOS ready via a
 platform abstraction layer). Inspired by Linux clients like ZapZap.
