@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { app, net } from 'electron';
 import { spawn } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
@@ -7,18 +7,22 @@ import { UpdaterInfo, UpdaterStatus } from '../shared/types';
 
 interface UpdateManifest {
   version: string;
-  installerFile: string;
+  installerFile: string; // local path or remote URL
   sha512: string;
+  source: 'local' | 'github';
 }
 
 /**
- * Local-folder updater: no external service required.
+ * Update checker with two channels:
  *
- * Drop the artifacts of a newer build — `latest.yml` plus the NSIS
- * `WhatsZAP Setup <version>.exe` — into the updates folder (local disk or a
- * network share, configurable in Settings). The app compares versions,
- * verifies the installer's sha512 against the manifest, then runs the NSIS
- * silent install and restarts.
+ * 1. GitHub Releases (primary, automatic): fetches `latest.yml` and the NSIS
+ *    installer from the repo's latest public release. Publishing a release
+ *    on GitHub is the only step needed — installed apps pick it up.
+ * 2. Local folder (fallback/override): `latest.yml` + Setup exe in the
+ *    configurable folder (local disk or network share).
+ *
+ * Either way the installer's sha512 is verified against the manifest before
+ * a silent NSIS install runs.
  */
 export class LocalUpdater {
   status: UpdaterStatus = { state: 'idle', message: '' };
@@ -29,20 +33,26 @@ export class LocalUpdater {
   constructor(
     private readonly getDir: () => string,
     private readonly exitApp: () => void,
+    private readonly githubRepo: string | null = null,
   ) {}
 
   info(): UpdaterInfo {
     const dir = this.resolveDir();
     let availableVersion: string | null = null;
     let installerName: string | null = null;
-    try {
-      const manifest = this.readManifest(dir);
-      if (manifest && this.isNewer(manifest.version, app.getVersion())) {
-        availableVersion = manifest.version;
-        installerName = manifest.installerFile;
+    if (this.pending && this.status.state === 'available') {
+      availableVersion = this.pending.version;
+      installerName = path.basename(this.pending.installerFile);
+    } else {
+      try {
+        const manifest = this.readLocalManifest(dir);
+        if (manifest && this.isNewer(manifest.version, app.getVersion())) {
+          availableVersion = manifest.version;
+          installerName = path.basename(manifest.installerFile);
+        }
+      } catch {
+        /* unreadable dir -> nothing available */
       }
-    } catch {
-      /* unreadable dir -> nothing available */
     }
     return {
       appVersion: app.getVersion(),
@@ -55,11 +65,44 @@ export class LocalUpdater {
 
   async check(): Promise<UpdaterInfo> {
     this.setStatus({ state: 'checking', message: 'Checking for updates…' });
+
+    // Channel 1: GitHub Releases.
+    if (this.githubRepo) {
+      try {
+        const res = await net.fetch(
+          `https://github.com/${this.githubRepo}/releases/latest/download/latest.yml`,
+          { signal: AbortSignal.timeout(15_000), headers: { 'Cache-Control': 'no-cache' } },
+        );
+        if (res.ok) {
+          const manifest = this.parseManifestYaml(await res.text(), 'github');
+          if (this.isNewer(manifest.version, app.getVersion())) {
+            this.pending = manifest;
+            this.setStatus({
+              state: 'available',
+              message: `Version ${manifest.version} is available.`,
+              version: manifest.version,
+            });
+            return this.info();
+          }
+          this.pending = null;
+          this.setStatus({ state: 'up-to-date', message: `Up to date (v${app.getVersion()}).` });
+          return this.info();
+        }
+        console.info(`[updater] github channel returned ${res.status}; falling back to local folder`);
+      } catch (err) {
+        console.info(
+          '[updater] github channel unreachable, falling back to local folder:',
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
+    // Channel 2: local folder.
     const dir = this.resolveDir();
     try {
-      const manifest = this.readManifest(dir);
+      const manifest = this.readLocalManifest(dir);
       if (!manifest) {
-        this.setStatus({ state: 'error', message: `No latest.yml found in ${dir}` });
+        this.setStatus({ state: 'error', message: `No updates found (GitHub unreachable, no latest.yml in ${dir}).` });
       } else if (this.isNewer(manifest.version, app.getVersion())) {
         this.pending = manifest;
         this.setStatus({
@@ -69,10 +112,7 @@ export class LocalUpdater {
         });
       } else {
         this.pending = null;
-        this.setStatus({
-          state: 'up-to-date',
-          message: `Up to date (v${app.getVersion()}).`,
-        });
+        this.setStatus({ state: 'up-to-date', message: `Up to date (v${app.getVersion()}).` });
       }
     } catch (err) {
       this.setStatus({
@@ -83,21 +123,31 @@ export class LocalUpdater {
     return this.info();
   }
 
-  /** Copies the installer to temp, verifies its hash, runs silent setup. */
+  /** Downloads (GitHub) or copies (local) the installer, verifies, installs. */
   async install(): Promise<void> {
     if (!this.pending || this.status.state !== 'available') {
       this.setStatus({ state: 'error', message: 'Run "Check for updates" first.' });
       return;
     }
-    const dir = this.resolveDir();
-    const source = path.join(dir, path.basename(this.pending.installerFile));
     this.setStatus({ state: 'installing', message: 'Preparing installer…' });
 
     try {
       const tmpDir = path.join(app.getPath('temp'), 'whatszap-update');
       fs.mkdirSync(tmpDir, { recursive: true });
-      const target = path.join(tmpDir, path.basename(source));
-      fs.copyFileSync(source, target);
+
+      let target: string;
+      if (this.pending.source === 'github') {
+        this.setStatus({ state: 'installing', message: `Downloading ${this.pending.version}…` });
+        const res = await net.fetch(this.pending.installerFile, {
+          signal: AbortSignal.timeout(600_000),
+        });
+        if (!res.ok) throw new Error(`Download failed (HTTP ${res.status}).`);
+        target = path.join(tmpDir, path.basename(this.pending.installerFile).replace(/ /g, '.'));
+        fs.writeFileSync(target, Buffer.from(await res.arrayBuffer()));
+      } else {
+        target = path.join(tmpDir, path.basename(this.pending.installerFile));
+        fs.copyFileSync(this.pending.installerFile, target);
+      }
 
       const hash = crypto.createHash('sha512').update(fs.readFileSync(target)).digest('base64');
       if (hash !== this.pending.sha512) {
@@ -147,22 +197,24 @@ export class LocalUpdater {
     return configured || path.join(app.getPath('userData'), 'updates');
   }
 
-  private readManifest(dir: string): UpdateManifest | null {
-    const manifestPath = path.join(dir, 'latest.yml');
-    if (!fs.existsSync(manifestPath)) return null;
-    const raw = fs.readFileSync(manifestPath, 'utf-8');
-
+  private parseManifestYaml(raw: string, source: 'local' | 'github'): UpdateManifest {
     const version = /^version:\s*(.+)$/m.exec(raw)?.[1]?.trim();
     const file = /^path:\s*(.+)$/m.exec(raw)?.[1]?.trim();
     const sha512 = /^sha512:\s*(.+)$/m.exec(raw)?.[1]?.trim();
     if (!version || !file || !sha512) {
       throw new Error('latest.yml is malformed (missing version/path/sha512).');
     }
-    const installerFile = path.join(dir, path.basename(file));
-    if (!fs.existsSync(installerFile)) {
-      throw new Error(`Installer "${path.basename(file)}" not found next to latest.yml.`);
+    return { version, installerFile: file, sha512, source };
+  }
+
+  private readLocalManifest(dir: string): UpdateManifest | null {
+    const manifestPath = path.join(dir, 'latest.yml');
+    if (!fs.existsSync(manifestPath)) return null;
+    const manifest = this.parseManifestYaml(fs.readFileSync(manifestPath, 'utf-8'), 'local');
+    if (!fs.existsSync(manifest.installerFile)) {
+      throw new Error(`Installer "${path.basename(manifest.installerFile)}" not found next to latest.yml.`);
     }
-    return { version, installerFile, sha512 };
+    return manifest;
   }
 
   /** Numeric semver-style comparison: true if a > b. */

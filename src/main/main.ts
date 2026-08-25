@@ -92,10 +92,12 @@ const popouts = new PopoutManager();
 profileManager.setPopouts(popouts);
 popouts.returnHandler = (id, prevKeepAlive) => profileManager.handlePopoutReturn(id, prevKeepAlive);
 
-// Local-folder updater (Settings -> Updates).
+// Updater: GitHub Releases channel first (repo is public), local folder as
+// fallback/override.
 const updater = new LocalUpdater(
   () => settingsStore.get().updatesDir,
   () => background.requestQuit(),
+  'DEMI-lk/whatszap',
 );
 updater.onStatus = (status) => {
   const win = windows.window;

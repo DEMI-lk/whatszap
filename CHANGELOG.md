@@ -4,6 +4,14 @@ All notable changes to WhatsZAP are documented here.
 The app version lives in `package.json`; the installed build reports it in
 Settings → Updates and in the ⋮ menu.
 
+## 1.2.4 — 2026-08-25
+
+### Added
+- **GitHub Releases update channel.** "Check for updates" now fetches the
+  latest public release from GitHub automatically — publishing a release
+  there is the only step; no more manual copying into the updates folder
+  (which remains as an offline/override fallback).
+
 ## 1.2.3 — 2026-08-24
 
 ### Added
