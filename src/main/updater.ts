@@ -212,7 +212,14 @@ export class LocalUpdater {
     if (!version || !file || !sha512) {
       throw new Error('latest.yml is malformed (missing version/path/sha512).');
     }
-    return { version, installerFile: file, sha512, source };
+    let installerFile = file;
+    if (source === 'github') {
+      if (!this.githubRepo) throw new Error('GitHub channel not configured.');
+      // GitHub renames asset spaces to dots; the manifest keeps spaces.
+      const asset = file.replace(/ /g, '.');
+      installerFile = `https://github.com/${this.githubRepo}/releases/latest/download/${asset}`;
+    }
+    return { version, installerFile, sha512, source };
   }
 
   private readLocalManifest(dir: string): UpdateManifest | null {
