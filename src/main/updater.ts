@@ -165,13 +165,21 @@ export class LocalUpdater {
       this.setStatus({ state: 'installing', message: `Installing ${this.pending.version}…` });
       console.info(`[updater] launching silent install of ${this.pending.version}`);
 
-      // `ping` delay (NOT `timeout`, which fails under redirected stdin) —
-      // the detached wrapper waits for this process to fully exit before
-      // running the installer, avoiding file-lock races.
-      const script = `ping -n 4 127.0.0.1 >nul && "${target}" /S --force-run`;
-      const child = spawn('cmd.exe', [
-        '/d', '/s', '/c', script,
-      ], {
+      // Write a tiny batch file instead of passing a complex command line
+      // through cmd.exe (Node's argument escaping mangles && and redirects).
+      // The batch waits (ping delay works under any stdin), then launches
+      // the installer after this process has fully exited — no file locks.
+      const batch = path.join(tmpDir, 'whatszap-update.cmd');
+      fs.writeFileSync(
+        batch,
+        [
+          '@echo off',
+          'ping -n 4 127.0.0.1 >nul',
+          `start "" "${target}" /S --force-run`,
+          '',
+        ].join('\r\n'),
+      );
+      const child = spawn(batch, [], {
         detached: true,
         stdio: 'ignore',
         windowsHide: true,
