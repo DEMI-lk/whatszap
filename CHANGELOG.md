@@ -4,6 +4,13 @@ All notable changes to WhatsZAP are documented here.
 The app version lives in `package.json`; the installed build reports it in
 Settings → Updates and in the ⋮ menu.
 
+## 1.2.5 — 2026-08-25
+
+### Test release
+- Live test of the GitHub Releases update channel: installed 1.2.4 apps
+  should discover, download, verify, and silently install this release via
+  Settings → Updates → "Check for updates". No functional changes.
+
 ## 1.2.4 — 2026-08-25
 
 ### Added
