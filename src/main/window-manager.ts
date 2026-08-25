@@ -72,6 +72,9 @@ export class WindowManager {
         wc?.send('shortcut:devtools');
       } else if (ctrl && input.key === 'Tab') {
         wc?.send(input.shift ? 'shortcut:profile-prev' : 'shortcut:profile-next');
+      } else if (ctrl && /^[0-9]$/.test(input.key)) {
+        // Ctrl+1..9 jump to profiles 1..9, Ctrl+0 to the 10th.
+        wc?.send('shortcut:profile-index', input.key === '0' ? 10 : parseInt(input.key, 10));
       }
     });
 

@@ -86,8 +86,10 @@ const api = {
     subscribe(IPC_EVENTS.resources, cb),
   onChromeVisibility: (cb: (visible: boolean) => void): (() => void) =>
     subscribe(IPC.chromeVisibility, cb),
-  onShortcut: (name: 'reload' | 'devtools' | 'profile-next' | 'profile-prev', cb: () => void): (() => void) =>
-    subscribe(`shortcut:${name}`, cb),
+  onShortcut: (
+    name: 'reload' | 'devtools' | 'profile-next' | 'profile-prev' | 'profile-index',
+    cb: (payload?: number) => void,
+  ): (() => void) => subscribe(`shortcut:${name}`, cb),
 };
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {

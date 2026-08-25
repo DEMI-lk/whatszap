@@ -4,6 +4,19 @@ All notable changes to WhatsZAP are documented here.
 The app version lives in `package.json`; the installed build reports it in
 Settings → Updates and in the ⋮ menu.
 
+## 1.2.3 — 2026-08-24
+
+### Added
+- **Ctrl+1…9 / Ctrl+0** jumps straight to profiles 1–10.
+
+### Fixed
+- Window could only be dragged by a tiny strip of the title bar — the entire
+  top bar is now draggable.
+- Silent updates never ran: the installer's `timeout` delay fails under
+  redirected input, so the launch chain aborted before starting setup
+  (now uses a stdin-proof `ping` delay, plus Mark-of-the-Web is stripped
+  from the copied installer so SmartScreen can't block it).
+
 ## 1.2.2 — 2026-08-24
 
 ### Added

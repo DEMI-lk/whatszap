@@ -1,7 +1,7 @@
 {
   "name": "whatszap",
   "productName": "WhatsZAP",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Lightweight Electron desktop client for WhatsApp Web with multiple isolated persistent profiles.",
   "license": "MIT",
   "author": "WhatsZAP contributors",

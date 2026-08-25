@@ -458,6 +458,10 @@ api.onShortcut('reload', () => api.reloadActive());
 api.onShortcut('devtools', () => api.toggleDevTools());
 api.onShortcut('profile-next', () => cycleProfile(1));
 api.onShortcut('profile-prev', () => cycleProfile(-1));
+api.onShortcut('profile-index', (n) => {
+  const p = profiles[(n ?? 1) - 1];
+  if (p) api.selectProfile(p.id);
+});
 
 function cycleProfile(dir: 1 | -1): void {
   if (profiles.length < 2) return;
