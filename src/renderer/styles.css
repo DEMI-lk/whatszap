@@ -42,23 +42,23 @@ body { display: flex; flex-direction: column; }
   gap: 8px;
   padding-right: 140px; /* room for native window controls overlay */
   background: var(--panel);
+  -webkit-app-region: drag; /* whole bar drags; interactive children opt out */
 }
 
-.drag { -webkit-app-region: drag; }
 #topbar .drag:first-child { width: 10px; height: 100%; }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 7px;
-  pointer-events: none;
 }
 .brand img { width: 18px; height: 18px; border-radius: 4px; }
 .brand span { font-weight: 600; letter-spacing: .3px; }
 
 .spacer { flex: 1; }
 
-#topmenu { -webkit-app-region: no-drag; display: flex; gap: 2px; }
+#topmenu { display: flex; gap: 2px; }
+#topmenu, #topmenu button { -webkit-app-region: no-drag; }
 
 #topmenu button, .menu button {
   background: transparent;
