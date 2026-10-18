@@ -28,7 +28,7 @@
     },
     "publish": {
       "provider": "generic",
-      "url": "https://updates.invalid/whatszap"
+      "url": "https://github.com/DEMI-lk/whatszap/releases/latest/download"
     },
     "files": [
       "dist/**/*",

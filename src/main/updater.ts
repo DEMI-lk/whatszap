@@ -133,6 +133,14 @@ export class LocalUpdater {
 
     try {
       const tmpDir = path.join(app.getPath('temp'), 'whatszap-update');
+      // Start from a clean folder: otherwise every update attempt leaves its
+      // Setup exe and launcher batch behind in %TEMP% forever. Best effort —
+      // a still-running previous installer may hold the files open.
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        /* locked by a running installer — stale files stay, not fatal */
+      }
       fs.mkdirSync(tmpDir, { recursive: true });
 
       let target: string;
@@ -179,12 +187,29 @@ export class LocalUpdater {
           '',
         ].join('\r\n'),
       );
-      const child = spawn(batch, [], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
+      // Node >= 18.20.2 / 20.12.2 (incl. the Node 22 runtime in Electron)
+      // refuses to spawn .bat/.cmd files directly — the CVE-2024-27980
+      // hardening makes spawn() throw EINVAL — so route the batch through
+      // cmd.exe explicitly.
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn('cmd.exe', ['/d', '/s', '/c', batch], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+          cwd: tmpDir,
+        });
+        let spawned = false;
+        child.once('spawn', () => {
+          spawned = true;
+          child.unref();
+          resolve();
+        });
+        // Also keeps a later 'error' from becoming an unhandled event.
+        child.on('error', (err) => {
+          if (spawned) console.error('[updater] installer launcher errored:', err);
+          else reject(err);
+        });
       });
-      child.unref();
       setTimeout(() => this.exitApp(), 500).unref?.();
     } catch (err) {
       this.setStatus({
@@ -226,6 +251,9 @@ export class LocalUpdater {
     const manifestPath = path.join(dir, 'latest.yml');
     if (!fs.existsSync(manifestPath)) return null;
     const manifest = this.parseManifestYaml(fs.readFileSync(manifestPath, 'utf-8'), 'local');
+    // `path:` is relative to the folder holding latest.yml, NOT to the process
+    // CWD (packaged builds run with the install dir as CWD).
+    manifest.installerFile = path.join(dir, path.basename(manifest.installerFile));
     if (!fs.existsSync(manifest.installerFile)) {
       throw new Error(`Installer "${path.basename(manifest.installerFile)}" not found next to latest.yml.`);
     }
