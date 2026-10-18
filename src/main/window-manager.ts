@@ -81,6 +81,18 @@ export class WindowManager {
     return this.win;
   }
 
+  /**
+   * Bring the window back from hidden/minimised and focus it. Used for
+   * second-instance and macOS activate — `toggle()` would HIDE a visible
+   * window there, which is the opposite of what a second launch means.
+   */
+  showAndFocus(): void {
+    if (!this.win) return;
+    if (this.win.isMinimized()) this.win.restore();
+    this.win.show();
+    this.win.focus();
+  }
+
   toggle(): void {
     if (!this.win) return;
     if (this.win.isVisible() && !this.win.isMinimized()) this.win.hide();

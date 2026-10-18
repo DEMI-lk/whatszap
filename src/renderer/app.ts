@@ -21,6 +21,7 @@ const setMaxProfiles = document.getElementById('set-max-profiles') as HTMLElemen
 const setRam = document.getElementById('set-ram') as HTMLInputElement;
 const setCpu = document.getElementById('set-cpu') as HTMLInputElement;
 const setBackground = document.getElementById('set-background') as HTMLInputElement;
+const setMemory = document.getElementById('set-memory') as HTMLSelectElement;
 
 const appVersionChip = document.getElementById('app-version') as HTMLDivElement;
 const updVersion = document.getElementById('upd-version') as HTMLElement;
@@ -119,7 +120,7 @@ function renderRail(): void {
 
     el.addEventListener('click', () => {
       // Popped-out profiles: focuses their window (main handles the guard).
-      if (!focused && !(p.id === activeId && p.state === 'active')) {
+      if (!focused) {
         api.selectProfile(p.id);
       }
     });
@@ -345,8 +346,10 @@ function fillSettings(): void {
   setRam.value = String(settings.ramLimitMB);
   setCpu.value = String(settings.cpuTargetPercent);
   setBackground.checked = settings.backgroundMode;
+  setMemory.value = settings.memoryMode ?? 'low';
   updDir.value = settings.updatesDir || '';
   updateBackgroundHint();
+  updateMemoryHint();
   renderPalette();
   void refreshUpdaterInfo();
 }
@@ -374,6 +377,19 @@ function updateBackgroundHint(): void {
   }
 }
 
+function updateMemoryHint(): void {
+  const el = document.getElementById('set-memory-state');
+  if (!el) return;
+  const mode = setMemory.value as MemoryMode;
+  const descriptions: Record<MemoryMode, string> = {
+    normal: 'Chromium defaults — fastest, highest memory use.',
+    low: 'Smaller Chromium/V8 memory budgets (recommended).',
+    minimal: 'Also renders in software — least RAM, higher CPU on scrolling and video.',
+  };
+  const pending = mode === (settings?.memoryMode ?? 'low') ? '' : ' Takes effect after a restart.';
+  el.textContent = `${descriptions[mode]}${pending}`;
+}
+
 async function submitModal(): Promise<void> {
   if (modalMode === 'new') {
     const name = inputName.value.trim();
@@ -386,9 +402,10 @@ async function submitModal(): Promise<void> {
   } else if (modalMode === 'settings') {
     settings = await api.updateSettings({
       startWithWindows: setStartup.checked,
-      ramLimitMB: clamp(parseInt(setRam.value, 10), 512, 8192, settings?.ramLimitMB ?? 1536),
+      ramLimitMB: clamp(parseInt(setRam.value, 10), 512, 8192, settings?.ramLimitMB ?? 1024),
       cpuTargetPercent: clamp(parseInt(setCpu.value, 10), 5, 100, settings?.cpuTargetPercent ?? 10),
       backgroundMode: setBackground.checked,
+      memoryMode: setMemory.value as MemoryMode,
       updatesDir: updDir.value.trim(),
     });
   }
@@ -405,6 +422,7 @@ document.getElementById('modal-ok')!.addEventListener('click', submitModal);
 backdrop.addEventListener('mousedown', (e) => { if (e.target === backdrop) closeModal(); });
 inputName.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitModal(); });
 setBackground.addEventListener('change', updateBackgroundHint);
+setMemory.addEventListener('change', updateMemoryHint);
 
 document.getElementById('avatar-upload')!.addEventListener('click', async () => {
   if (!avatarTarget) return;
@@ -441,8 +459,9 @@ api.onUpdaterStatus((s) => {
 api.onSnapshot((list) => {
   profiles = list;
   // Reflect reality: no active profile (e.g. while backgrounded/loading)
-  // means no highlighted circle.
-  const current = list.find((p) => p.state === 'active');
+  // means no highlighted circle. A popped-out profile is `active` too, so it
+  // must be excluded — otherwise the ring lands on the wrong circle (M-1).
+  const current = list.find((p) => p.state === 'active' && !p.poppedOut);
   activeId = current ? current.id : null;
   renderRail();
   loadingHint.style.opacity = activeId ? '0' : '1';
@@ -478,7 +497,7 @@ btnAdd.addEventListener('click', () => openModal('new'));
   settings = await api.getSettings();
   applyAccent(settings.accentColor || '#00a884');
   profiles = await api.getProfiles();
-  const current = profiles.find((p) => p.state === 'active');
+  const current = profiles.find((p) => p.state === 'active' && !p.poppedOut);
   activeId = current ? current.id : null;
   renderRail();
   reportBounds();

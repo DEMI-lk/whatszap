@@ -92,6 +92,15 @@
 
         <h4>Performance</h4>
         <div class="row">
+          <span>Memory mode</span>
+          <select id="set-memory">
+            <option value="normal">Normal — fastest</option>
+            <option value="low">Low — less RAM (default)</option>
+            <option value="minimal">Minimal — least RAM, higher CPU</option>
+          </select>
+        </div>
+        <p class="hint" id="set-memory-state"></p>
+        <div class="row">
           <span>RAM limit (MB)</span>
           <input type="number" id="set-ram" min="512" max="8192" step="128" />
         </div>

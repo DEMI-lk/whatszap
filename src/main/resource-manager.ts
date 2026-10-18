@@ -21,13 +21,16 @@ export class ResourceManager {
   private latest: ResourceSample = {
     totalRamMB: 0,
     cpuPercent: 0,
-    ramLimitMB: 1536,
+    ramLimitMB: 1024,
     cpuTargetPercent: 10,
     lastAction: 'none',
   };
 
   private readonly sampleMs = 15_000;
   private readonly sustainedSamples = 8; // ~2 minutes
+
+  /** Wired by main.ts to push each sample to the shell (IPC_EVENTS.resources). */
+  onSample: ((sample: ResourceSample) => void) | null = null;
 
   constructor(
     private settings: Settings,
@@ -39,7 +42,7 @@ export class ResourceManager {
       inactiveCount: () => number;
     },
   ) {
-    this.settings.ramLimitMB = this.settings.ramLimitMB || 1536;
+    this.settings.ramLimitMB = this.settings.ramLimitMB || 1024;
     this.settings.cpuTargetPercent = this.settings.cpuTargetPercent || 10;
     this.latest.ramLimitMB = this.settings.ramLimitMB;
     this.latest.cpuTargetPercent = this.settings.cpuTargetPercent;
@@ -93,6 +96,8 @@ export class ResourceManager {
     };
     this.logBands(ramMB);
     this.enforce();
+    // Push the fresh sample so the chip doesn't wait for its 15s poll (M-3).
+    this.onSample?.(this.latest);
   }
 
   /** One-line visibility when RAM crosses 80% of the limit (and back). */

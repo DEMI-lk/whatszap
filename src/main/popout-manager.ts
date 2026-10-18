@@ -25,10 +25,6 @@ export class PopoutManager {
     return this.entries.has(profileId);
   }
 
-  poppedIds(): string[] {
-    return [...this.entries.keys()];
-  }
-
   focus(profileId: string): void {
     const entry = this.entries.get(profileId);
     if (!entry) return;
@@ -66,6 +62,16 @@ export class PopoutManager {
     };
     onResize();
     win.on('resize', onResize);
+
+    // Detach the shared view from this window while the window is still alive
+    // (M-6): relying on the parent being cleared as it is destroyed is the
+    // crash-class hazard the review flagged, and re-attaching a view that is
+    // still parented elsewhere would fail.
+    win.on('close', () => {
+      win.removeListener('resize', onResize);
+      if (win.isDestroyed() || win.contentView.children.includes(view) === false) return;
+      win.contentView.removeChildView(view);
+    });
 
     win.on('closed', () => {
       const entry = this.entries.get(profileId);

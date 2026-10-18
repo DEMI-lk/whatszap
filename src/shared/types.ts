@@ -3,6 +3,13 @@ export const WHATSAPP_URL = 'https://web.whatsapp.com';
 
 export type ProfileState = 'destroyed' | 'loading' | 'active' | 'suspended';
 
+/**
+ * Chromium memory/performance profile, applied at startup (restart required):
+ * 'normal' = defaults, 'low' = smaller memory budgets, 'minimal' = low +
+ * software rendering (least RAM, most CPU).
+ */
+export type MemoryMode = 'normal' | 'low' | 'minimal';
+
 export interface ProfileMeta {
   id: string;
   name: string;
@@ -36,6 +43,8 @@ export interface AppSettings {
   updatesDir: string;
   /** UI accent color (hex). */
   accentColor: string;
+  /** Chromium memory profile; changing it needs an app restart. */
+  memoryMode: MemoryMode;
 }
 
 export type UpdaterState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'installing' | 'error';

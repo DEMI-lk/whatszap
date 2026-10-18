@@ -1,11 +1,12 @@
 import { NotificationProvider } from '../notifications/providers/notification-provider';
-import { LinuxNotificationProvider } from '../notifications/providers/linux-notification-provider';
-import { MacOSNotificationProvider } from '../notifications/providers/macos-notification-provider';
 import { WindowsNotificationProvider } from '../notifications/providers/windows-notification-provider';
+import { createLinuxLayer } from './linux';
+import { createMacLayer } from './macos';
 
 /**
  * Platform abstraction layer. Core code never branches on process.platform
- * directly; each OS ships its own implementations (placeholders for V1).
+ * directly; each OS ships its own implementations (Linux/macOS are V2
+ * placeholders, Windows ships the fully supported tray build).
  */
 export interface PlatformLayer {
   readonly id: 'windows' | 'linux' | 'macos';
@@ -15,12 +16,12 @@ export interface PlatformLayer {
 
 export function getPlatform(): PlatformLayer {
   switch (process.platform) {
+    case 'linux':
+      return createLinuxLayer();
+    case 'darwin':
+      return createMacLayer();
     case 'win32':
       return { id: 'windows', createNotificationProvider: () => new WindowsNotificationProvider() };
-    case 'linux':
-      return { id: 'linux', createNotificationProvider: () => new LinuxNotificationProvider() };
-    case 'darwin':
-      return { id: 'macos', createNotificationProvider: () => new MacOSNotificationProvider() };
     default:
       return { id: 'windows', createNotificationProvider: () => new WindowsNotificationProvider() };
   }

@@ -1,4 +1,4 @@
-import { BrowserWindow, shell, WebContentsView } from 'electron';
+import { BrowserWindow, shell, WebContentsView, type WebContents } from 'electron';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { ContentBounds, WHATSAPP_URL } from '../shared/types';
@@ -18,6 +18,13 @@ export class WebviewManager extends EventEmitter {
   private readonly views = new Map<string, WebContentsView>();
   /** Reverse lookup: webContents id -> profile id (notification routing). */
   private readonly wcProfile = new Map<number, string>();
+  /**
+   * Views whose initial navigation this manager already started. A WeakSet on
+   * purpose: entries disappear with their webContents, so nothing leaks.
+   * `getURL()` cannot express "a load is in flight" (it stays '' until the
+   * navigation commits), which is how the same page used to load twice (L-5).
+   */
+  private readonly loadStarted = new WeakSet<WebContents>();
   private attachedId: string | null = null;
   private bounds: ContentBounds = { x: 0, y: 0, width: 0, height: 0 };
   private hasRealBounds = false;
@@ -27,14 +34,6 @@ export class WebviewManager extends EventEmitter {
     private readonly sessions: SessionManager,
   ) {
     super();
-  }
-
-  hasView(profileId: string): boolean {
-    return this.views.has(profileId);
-  }
-
-  getView(profileId: string): WebContentsView | undefined {
-    return this.views.get(profileId);
   }
 
   /** Creates (or returns) the view and loads WhatsApp Web if needed. */
@@ -81,13 +80,41 @@ export class WebviewManager extends EventEmitter {
         this.views.delete(profileId);
       });
 
+      // A failed main-frame navigation must allow a later retry (see L-5 fix).
+      wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
+        if (!isMainFrame) return;
+        console.error(`[webview] did-fail-load (${code} ${desc}): ${url}`);
+        this.loadStarted.delete(wc);
+      });
+
       this.views.set(profileId, view);
 
+      // Start the first navigation here; ProfileManager waits for it instead of
+      // starting a second one (L-5).
       if (!wc.isLoading() && wc.getURL() === '') {
-        void wc.loadURL(WHATSAPP_URL);
+        this.startInitialLoad(view);
       }
     }
     return view;
+  }
+
+  /**
+   * True when a navigation for this view is either already started (tracked
+   * here) or running. Callers use it to decide between "wait for the load" and
+   * "start the load".
+   */
+  isLoadInFlight(view: WebContentsView): boolean {
+    return this.loadStarted.has(view.webContents) || view.webContents.isLoading();
+  }
+
+  /** Starts the initial navigation for a view exactly once. */
+  private startInitialLoad(view: WebContentsView): void {
+    const wc = view.webContents;
+    this.loadStarted.add(wc);
+    void wc.loadURL(WHATSAPP_URL).catch((err) => {
+      console.error('[webview] loadURL rejected:', err instanceof Error ? err.message : err);
+      this.loadStarted.delete(wc);
+    });
   }
 
   setBounds(bounds: ContentBounds): void {
@@ -102,10 +129,6 @@ export class WebviewManager extends EventEmitter {
       height: Math.max(1, bounds.height),
     });
     active.setVisible(this.hasRealBounds);
-  }
-
-  getBounds(): ContentBounds {
-    return { ...this.bounds };
   }
 
   attach(profileId: string): void {
@@ -198,10 +221,6 @@ export class WebviewManager extends EventEmitter {
   focusActive(): void {
     if (!this.attachedId) return;
     this.views.get(this.attachedId)?.webContents.focus();
-  }
-
-  allIds(): string[] {
-    return [...this.views.keys()];
   }
 
   /** Which profile owns this webContents (null if unknown/untracked). */

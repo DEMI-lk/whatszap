@@ -2,7 +2,8 @@ import { app, ipcMain } from 'electron';
 import * as path from 'node:path';
 import { IPC, IPC_EVENTS, Settings } from '../shared/types';
 import { ProfileStore } from '../profiles/profile-store';
-import { SessionManager } from '../webview/session-manager';import { WebviewManager } from '../webview/webview-manager';
+import { SessionManager } from '../webview/session-manager';
+import { WebviewManager } from '../webview/webview-manager';
 import { ProfileManager } from './profile-manager';
 import { ResourceManager } from './resource-manager';
 import { SettingsStore } from './settings-store';
@@ -12,11 +13,21 @@ import { NotificationManager } from '../notifications/notification-manager';
 import { WindowsTray } from '../platform/windows';
 import { PopoutManager } from './popout-manager';
 import { LocalUpdater } from './updater';
+import { applyMemoryTuning } from './memory-tuning';
+import { sanitizeSettingsPatch } from './ipc-validation';
 
-if (!ensureSingleInstance(() => {
-  windows.toggle();
-})) {
-  process.exit(0);
+// Single instance: a second launch must SURFACE the running window, never
+// toggle it away (M-5).
+const isPrimaryInstance = ensureSingleInstance(() => {
+  windows.showAndFocus();
+});
+
+if (!isPrimaryInstance) {
+  // The lock belongs to the running instance, which the 'second-instance'
+  // event has just focused. Quit instead of exiting abruptly (L-14); the
+  // timer is a safety net because a pre-ready app.quit() can be ignored.
+  app.quit();
+  setTimeout(() => app.exit(0), 1000).unref?.();
 }
 
 app.setAppUserModelId('com.whatszap.app'); // required for Windows toasts
@@ -28,6 +39,10 @@ app.userAgentFallback = SessionManager.chromeUserAgent();
 const settingsStore = new SettingsStore(path.join(app.getPath('userData'), 'config', 'settings.json'));
 const profilesRoot = path.join(app.getPath('userData'), 'profiles');
 const store = new ProfileStore(path.join(app.getPath('userData'), 'config', 'profiles.json'));
+
+// Chromium memory profile — before ANY window/session exists, since the
+// switches are read while the first renderer is being created.
+applyMemoryTuning(app.commandLine, settingsStore.get().memoryMode);
 
 const windows = new WindowManager();
 const sessionManager = new SessionManager(profilesRoot);
@@ -60,6 +75,13 @@ resources = new ResourceManager(settingsStore.get(), {
   destroyOldestInactive: () => profileManager.destroyOldestInactive(),
   inactiveCount: () => profileManager.inactiveCount(),
 });
+
+// The renderer subscribes to this push event instead of polling for the chip
+// (M-3 — the subscription existed but main never emitted).
+resources.onSample = (sample) => {
+  const win = windows.window;
+  if (win && !win.isDestroyed()) win.webContents.send(IPC_EVENTS.resources, sample);
+};
 
 const background = new BackgroundManager(
   () => settingsStore.get().backgroundMode,
@@ -107,8 +129,11 @@ updater.onStatus = (status) => {
 function registerCoreIpc(): void {
   ipcMain.handle(IPC.getSettings, () => settingsStore.get());
   ipcMain.handle(IPC.updateSettings, (_e, patch: Partial<Settings>) => {
-    const updated = settingsStore.update(patch);
-    if (patch.startWithWindows !== undefined) applyLoginItem(updated.startWithWindows);
+    // The renderer is the untrusted side of the bridge (L-1): only known keys
+    // survive, numbers are clamped, unknown types are dropped.
+    const clean = sanitizeSettingsPatch(patch);
+    const updated = Object.keys(clean).length > 0 ? settingsStore.update(clean) : settingsStore.get();
+    if (clean.startWithWindows !== undefined) applyLoginItem(updated.startWithWindows);
     return updated;
   });
   resources.registerIpc();
@@ -133,6 +158,10 @@ function launchedHidden(): boolean {
 }
 
 app.whenReady().then(async () => {
+  // A second instance that failed to get the lock must not build any UI; its
+  // exit is handled above.
+  if (!isPrimaryInstance) return;
+
   registerCoreIpc();
 
   // Keep the Windows login entry and the stored setting in sync. A stored
@@ -181,7 +210,7 @@ app.whenReady().then(async () => {
   // Shortcuts sent by WindowManager land in the shell renderer, which routes
   // them back through the preload API (reload/devtools/profile cycling).
 
-  app.on('activate', () => windows.toggle());
+  app.on('activate', () => windows.showAndFocus());
 });
 
 app.on('before-quit', () => {

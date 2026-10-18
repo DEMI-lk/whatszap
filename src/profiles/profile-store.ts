@@ -6,8 +6,6 @@ interface ProfilesFile {
   profiles: ProfileMeta[];
 }
 
-const EMPTY: ProfilesFile = { profiles: [] };
-
 /**
  * Persists profile metadata (names, avatars) separately from browser session
  * data. Writes are atomic (tmp file + rename) to survive crashes.
@@ -21,19 +19,31 @@ export class ProfileStore {
     try {
       const raw = fs.readFileSync(this.filePath, 'utf-8');
       const parsed = JSON.parse(raw) as ProfilesFile;
-      if (!parsed || !Array.isArray(parsed.profiles)) return { ...EMPTY };
+      if (!parsed || !Array.isArray(parsed.profiles)) return { profiles: [] };
       return parsed;
     } catch {
-      return { ...EMPTY };
+      // NOTE: always a FRESH array. Spreading a shared `EMPTY` object used to
+      // hand every store the same `profiles` array, so an instance whose file
+      // was missing/corrupt started life with whatever another instance had
+      // pushed in the meantime.
+      return { profiles: [] };
     }
   }
 
   private save(data: ProfilesFile): void {
-    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    const tmp = `${this.filePath}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
-    fs.renameSync(tmp, this.filePath);
+    // The in-memory list is authoritative even when the write fails, so a
+    // locked/full %APPDATA% can't throw out of an IPC handler and leave the
+    // app listing a different set of profiles than its own cache (L-2). The
+    // next successful save writes the whole list, so it self-heals.
     this.cache = data.profiles;
+    try {
+      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+      const tmp = `${this.filePath}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
+      fs.renameSync(tmp, this.filePath);
+    } catch (err) {
+      console.error('[profiles] persist failed:', err);
+    }
   }
 
   private ensure(): ProfilesFile {

@@ -265,7 +265,7 @@ body { display: flex; flex-direction: column; }
   border-color: var(--text);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
 }
-#modal input[type="number"], #modal input[type="text"], #input-name {
+#modal input[type="number"], #modal input[type="text"], #modal select, #input-name {
   width: 110px;
   background: var(--panel-2);
   border: 1px solid #37424a;
@@ -274,6 +274,7 @@ body { display: flex; flex-direction: column; }
   padding: 5px 8px;
   font-family: inherit;
 }
+#modal select { width: 190px; }
 #input-name { width: 100%; }
 .hint { color: var(--text-dim); font-size: 11px; margin-top: 4px; }
 #modal footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }

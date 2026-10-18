@@ -43,10 +43,6 @@ export class BackgroundManager {
   }
 }
 
-export function isWindows(): boolean {
-  return process.platform === 'win32';
-}
-
 export function ensureSingleInstance(onSecondLaunch: () => void): boolean {
   const gotLock = app.requestSingleInstanceLock();
   if (!gotLock) {

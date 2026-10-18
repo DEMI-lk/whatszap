@@ -4,6 +4,75 @@ All notable changes to WhatsZAP are documented here.
 The app version lives in `package.json`; the installed build reports it in
 Settings → Updates and in the ⋮ menu.
 
+## Unreleased
+
+### Fixed
+- **Self-update never installed (`spawn EINVAL`).** The delayed installer
+  launcher is now started through `cmd.exe /d /s /c`, because Node ≥ 18.20.2
+  (all Electron 37 builds) refuses to `spawn()` a `.cmd` file directly.
+- **Local update folder ignored its own manifest location.** `latest.yml`'s
+  relative `path:` is now resolved against the folder that contains the
+  manifest instead of the process working directory, so "Check for updates"
+  finds (and installs) an installer that sits next to `latest.yml` no matter
+  where the app was started from.
+- **"Remove avatar" / "Reset to initials" only worked after a restart.** The
+  live profile record is patched together with the saved one, so the rail
+  updates immediately.
+- **Wrong profile ringed when a pop-out existed.** Profiles that are "active"
+  only because they live in their own window no longer steal the highlight, and
+  clicking such a circle reaches the main process again (it focuses the pop-out).
+- **Launching WhatsZAP a second time hid the running window.** A second launch
+  (and macOS "activate") now restores and focuses the existing window instead
+  of toggling it away; the tray keeps its toggle behaviour.
+- **Update staging folder was never cleaned.** `%TEMP%\whatszap-update` is now
+  emptied before each attempt, so old Setup exe's and launcher batches no longer
+  accumulate (a locked file from a still-running installer is tolerated).
+- **Second instance exited abruptly.** It now quits through Electron
+  (`app.quit()`, plus a short `app.exit(0)` safety net) and skips building any
+  UI instead of killing the process with `process.exit(0)`.
+- Removed an unreferenced 605 KB image from `assets/`, split two imports that
+  shared a line, and pointed the `build.publish` URL at the real release
+  channel (it used to be `https://updates.invalid/whatszap`).
+- **Deleting the active profile no longer leaves a blank window.** The
+  replacement is now any other profile (preferring one that is already warm)
+  instead of only "suspended" ones, which never matched Sleep profiles.
+- **Closing a pop-out window hands the profile back to the main window.**
+  The shared view is detached from the window while it is still alive, and if
+  the main window is still empty the same (warm) page is re-attached — no
+  reload, no blank content area. A profile closed mid-load no longer gets stuck
+  in the "loading" state either.
+- **The RAM/CPU chip updates from a push event** instead of waiting for its
+  15-second poll (the subscription existed, main never emitted it).
+- **A cold profile loads WhatsApp Web once, not twice** — the view manager is
+  now the single owner of the first navigation and the load path waits for it.
+- **Settings, window geometry and profile names coming from the UI are
+  validated in the main process** (numbers clamped, colours must be hex, enums
+  checked, `activeProfileId` not writable from the renderer) so a buggy or
+  hostile page can't corrupt `settings.json` or the native view geometry.
+- **Profile metadata writes can no longer fail loudly or diverge from disk**
+  when `%APPDATA%` is locked or full, and two profile stores no longer share
+  one in-memory list (a store whose `profiles.json` was missing/corrupt used to
+  inherit another store's entries).
+- Removed dead code (`isWindows`, `poppedIds`, unused `WebviewManager`
+  accessors, the superseded `shared/renderer-api.ts`) and wired the Linux/macOS
+  placeholder layers into `getPlatform()` so they are no longer unreferenced.
+- Custom-avatar images are cached as data URLs (invalidated whenever the avatar
+  changes) instead of being re-read and re-encoded on every UI snapshot.
+
+### Added
+- **Settings → Performance → Memory mode.** `low` (default) trims Chromium's
+  compositor/V8 memory budgets, `minimal` additionally renders in software for
+  the lowest RAM use, `normal` restores Chromium defaults. Applied at startup —
+  the app asks for a restart when changed.
+- **Nirmala UI** is enforced for message text (`.selectable-text`) so Sinhala
+  and other Indic scripts render with correct shaping.
+
+### Changed
+- **RAM limit default lowered from 1536 MB to 1024 MB** so the resource
+  governor clears inactive caches / puts sleep profiles away sooner. Existing
+  installs still holding the old default are migrated once; a value you picked
+  yourself is left alone.
+
 ## 1.2.5 — 2026-08-25
 
 ### Test release

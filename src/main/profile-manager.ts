@@ -8,6 +8,8 @@ import { SessionManager } from '../webview/session-manager';
 import { WebviewManager } from '../webview/webview-manager';
 import { NotificationManager } from '../notifications/notification-manager';
 import { PopoutManager } from './popout-manager';
+import { AvatarCache } from './avatar-cache';
+import { sanitizeBounds, sanitizeName } from './ipc-validation';
 
 /**
  * Central orchestrator: owns every ProfileSession, wires store + sessions +
@@ -20,10 +22,32 @@ export class ProfileManager {
   private popouts: PopoutManager | null = null;
   /** Serializes select() so concurrent activations can't interleave. */
   private selectQueue: Promise<void> = Promise.resolve();
+  /** Profiles that were the SHELL's active one when popped out (M-6). */
+  private readonly poppedFromShell = new Set<string>();
+  /** Cached data URLs for custom avatar files (M-2). */
+  private readonly avatarCache = new AvatarCache();
   private suspendedOrder(): ProfileSession[] {
     return [...this.sessionsMap.values()]
       .filter((s) => s.state === 'suspended')
       .sort((a, b) => a.lastActiveAt - b.lastActiveAt);
+  }
+
+  /**
+   * Best profile to fall back to when the active one is deleted (M-4). Prefers
+   * cheap: an already-warm suspended profile, then a live keep-alive one, then
+   * a destroyed one that has to reload WhatsApp. Profiles living in their own
+   * pop-out window rank last — selecting one focuses that window instead of
+   * filling the shell.
+   */
+  private replacementFor(excludeId: string): ProfileSession | null {
+    const rank = (s: ProfileSession): number => {
+      const stateRank = s.state === 'suspended' ? 0 : s.state === 'active' ? 1 : 2;
+      return (this.popouts?.isPopped(s.id) ? 10 : 0) + stateRank;
+    };
+    const candidates = [...this.sessionsMap.values()]
+      .filter((s) => s.id !== excludeId)
+      .sort((a, b) => rank(a) - rank(b) || a.lastActiveAt - b.lastActiveAt);
+    return candidates[0] ?? null;
   }
 
   constructor(
@@ -73,6 +97,12 @@ export class ProfileManager {
     });
     ipcMain.handle(IPC.avatarsList, () => this.listBuiltinAvatars());
     ipcMain.handle(IPC.removeAvatar, (_e, id: string) => {
+      // Both the store AND the live session (the snapshot reads rec.meta).
+      const rec = this.sessionsMap.get(id);
+      if (rec) {
+        this.invalidateAvatarCache(rec.meta.avatar);
+        rec.meta.avatar = null;
+      }
       this.store.update(id, { avatar: null });
       this.emitSnapshot();
     });
@@ -83,7 +113,12 @@ export class ProfileManager {
       void this.popout(id).catch((err) => console.error(`[popout] ${id} failed:`, err));
     });
     ipcMain.handle(IPC.popinProfile, (_e, id: string) => this.popouts?.close(id));
-    ipcMain.handle(IPC.contentBounds, (_e, bounds: ContentBounds) => this.setBounds(bounds));
+    ipcMain.handle(IPC.contentBounds, (_e, bounds: ContentBounds) => {
+      // Last line of defence for renderer-supplied geometry (L-1): NaN or a
+      // 1e9-sized rect must never reach the native view.
+      const clean = sanitizeBounds(bounds);
+      if (clean) this.setBounds(clean);
+    });
     ipcMain.handle(IPC.reloadActive, () => this.webviews.reloadActive());
     ipcMain.handle(IPC.toggleDevTools, () => this.webviews.toggleDevToolsActive());
     ipcMain.handle(IPC.setViewVisible, (_e, visible: boolean) => this.webviews.setActiveVisible(visible));
@@ -184,7 +219,7 @@ export class ProfileManager {
     }
     const meta: ProfileMeta = {
       id: this.store.nextProfileId(),
-      name: (name ?? '').trim() || `Profile ${this.store.count() + 1}`,
+      name: sanitizeName(name, `Profile ${this.store.count() + 1}`),
       avatar: null,
       createdAt: Date.now(),
       // Conservative default: only the very first profile starts Active;
@@ -200,7 +235,7 @@ export class ProfileManager {
   }
 
   rename(id: string, name: string): void {
-    const clean = name.trim();
+    const clean = sanitizeName(name, '');
     if (!clean) return;
     this.store.update(id, { name: clean });
     const rec = this.sessionsMap.get(id);
@@ -219,11 +254,15 @@ export class ProfileManager {
       await new Promise((r) => setTimeout(r, 50));
     }
     if (rec.state === 'active') {
-      const others = this.suspendedOrder();
+      const replacement = this.replacementFor(id);
       this.webviews.detach();
       this.activeId = null;
-      if (others.length > 0) await this.select(others[others.length - 1].id);
+      // Any other profile will do — the old code only considered *suspended*
+      // ones and left the shell blank when they were all Sleep/destroyed (M-4).
+      if (replacement) await this.select(replacement.id);
     }
+    this.poppedFromShell.delete(id);
+    this.invalidateAvatarCache(rec.meta.avatar);
     this.webviews.destroy(id);
     this.sessionsMap.delete(id);
     this.store.remove(id);
@@ -271,6 +310,10 @@ export class ProfileManager {
     const dest = path.join(dir, `avatar${ext}`);
     fs.copyFileSync(sourceFile, dest);
 
+    // The fixed file name can be reused by a new upload (same extension), so
+    // the cached data URL for it must be dropped (M-2).
+    this.invalidateAvatarCache(rec.meta.avatar);
+    this.invalidateAvatarCache(dest);
     rec.meta.avatar = dest;
     this.store.update(id, { avatar: dest });
     this.emitSnapshot();
@@ -285,6 +328,7 @@ export class ProfileManager {
       console.warn(`[avatars] invalid builtin id: ${avatarId}`);
       return;
     }
+    this.invalidateAvatarCache(rec.meta.avatar);
     rec.meta.avatar = avatarId;
     this.store.update(id, { avatar: avatarId });
     this.emitSnapshot();
@@ -424,6 +468,9 @@ export class ProfileManager {
     if (wasActive) {
       this.webviews.detach();
       this.activeId = null;
+      // Remember it: if the shell is still empty when the window closes, the
+      // profile comes back instead of leaving a blank content area (M-6).
+      this.poppedFromShell.add(id);
     } else if (rec.state === 'destroyed' || view.webContents.getURL() === '') {
       transition(rec, 'loading');
       this.emitSnapshot();
@@ -447,11 +494,31 @@ export class ProfileManager {
   /** Called by PopoutManager when a pop-out window closes. */
   handlePopoutReturn(id: string, prevKeepAlive: boolean): void {
     const rec = this.sessionsMap.get(id);
-    if (!rec) return; // profile was deleted while popped
+    if (!rec) {
+      // Profile was deleted while popped.
+      this.poppedFromShell.delete(id);
+      return;
+    }
     rec.meta.keepAlive = prevKeepAlive;
     this.store.update(id, { keepAlive: prevKeepAlive });
 
-    if (rec.state === 'active') {
+    const wasShellActive = this.poppedFromShell.delete(id);
+    if (wasShellActive && !this.activeId) {
+      // It was the shell's profile when it was popped out and the user never
+      // switched away: hand the (still warm) view back to the shell instead of
+      // leaving it empty (M-6).
+      console.info(`[popout] ${id} returned to the shell window`);
+      void this.select(id).catch((err) =>
+        console.error(`[popout] reattach ${id} failed:`, err instanceof Error ? err.message : err),
+      );
+      this.emitSnapshot();
+      return;
+    }
+
+    // Not (or no longer) the shell's profile: restore the previous Active/Sleep
+    // mode. 'loading' counts too — a window closed while the page was still
+    // loading used to leave the session stuck in that state (L-6).
+    if (rec.state === 'active' || rec.state === 'loading') {
       if (prevKeepAlive) {
         transition(rec, 'suspended');
         this.webviews.setMuted(id, true);
@@ -553,6 +620,10 @@ export class ProfileManager {
   private loadWhatsApp(view: WebContentsView): Promise<void> {
     const wc = view.webContents;
     if (wc.getURL().startsWith(WHATSAPP_URL)) return Promise.resolve();
+    // A navigation started by ensureView() has not committed yet, so getURL()
+    // is still '' while a load IS in flight — the old code could not tell the
+    // two apart and started a second load of the same page (L-5).
+    const startNewLoad = !this.webviews.isLoadInFlight(view);
     return new Promise((resolve) => {
       let settled = false;
       const done = () => {
@@ -563,14 +634,11 @@ export class ProfileManager {
         resolve();
       };
       wc.once('did-finish-load', done);
-      wc.once('did-fail-load', (_e, code, desc, url, isMain) => {
-        if (isMain && !settled) {
-          console.error(`[webview] did-fail-load (${code} ${desc}): ${url}`);
-        }
-      });
-      void wc.loadURL(WHATSAPP_URL).catch((err) =>
-        console.error('[webview] loadURL rejected:', err instanceof Error ? err.message : err),
-      );
+      if (startNewLoad) {
+        void wc.loadURL(WHATSAPP_URL).catch((err) =>
+          console.error('[webview] loadURL rejected:', err instanceof Error ? err.message : err),
+        );
+      }
       // Never hang forever on slow networks.
       setTimeout(() => {
         if (!settled) {
@@ -640,7 +708,13 @@ export class ProfileManager {
         return null;
       }
     }
-    return readAvatarDataUrl(avatar);
+    // Custom files: cached, because toInfo() runs on every snapshot (M-2).
+    return this.avatarCache.get(avatar, () => readAvatarDataUrl(avatar));
+  }
+
+  /** Drops the cached data URL for a (possibly custom) avatar reference. */
+  private invalidateAvatarCache(avatar: string | null): void {
+    if (avatar && !avatar.startsWith('builtin:')) this.avatarCache.invalidate(avatar);
   }
 
   private snapshot(): ProfileInfo[] {

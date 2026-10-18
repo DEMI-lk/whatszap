@@ -8,6 +8,7 @@ declare global {
   }
   type AppSettings = import('../shared/types').AppSettings;
   type ContentBounds = import('../shared/types').ContentBounds;
+  type MemoryMode = import('../shared/types').MemoryMode;
   type ProfileInfo = import('../shared/types').ProfileInfo;
   type ResourceSample = import('../shared/types').ResourceSample;
 }
