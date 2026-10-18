@@ -46,3 +46,36 @@ class NotificationShim {
 }
 
 (window as unknown as { Notification: unknown }).Notification = NotificationShim;
+
+/**
+ * Font override: message text (`selectable-text` is WhatsApp's class for it)
+ * is rendered with Nirmala UI so Sinhala and other Indic scripts shape
+ * correctly instead of falling back to a mismatched font. The view shares the
+ * page's world (contextIsolation off), so this is a plain DOM patch.
+ */
+const FONT_OVERRIDE_CSS = `
+.selectable-text,
+.selectable-text span {
+  font-family: "Nirmala UI", sans-serif !important;
+  font-style: normal;
+  font-weight: 400;
+}
+`;
+
+const FONT_STYLE_ID = 'whatszap-font-overrides';
+
+function applyFontOverrides(): void {
+  if (document.getElementById(FONT_STYLE_ID)) return;
+  const target = document.head ?? document.documentElement;
+  if (!target) return;
+  const style = document.createElement('style');
+  style.id = FONT_STYLE_ID;
+  style.textContent = FONT_OVERRIDE_CSS;
+  target.appendChild(style);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', applyFontOverrides, { once: true });
+} else {
+  applyFontOverrides();
+}
