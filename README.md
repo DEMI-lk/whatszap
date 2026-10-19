@@ -71,6 +71,10 @@ npm run dist     # package for Windows (NSIS + portable) into release/
 
 Requires Node 18+ and npm.
 
+Or simply double-click **`run.bat`** — it installs dependencies if they're
+missing, builds, and launches the app (extra arguments are passed through, e.g.
+`run.bat --hidden`).
+
 See [BUG-REPORT.md](BUG-REPORT.md) for the current code review: findings,
 severity, fix status and how each fix was verified.
 
