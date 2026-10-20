@@ -132,7 +132,7 @@ export class WebviewManager extends EventEmitter {
   }
 
   attach(profileId: string): void {
-    const win = this.window();
+    const win = this.liveWindow();
     if (!win) return;
     const view = this.ensureView(profileId);
     if (this.attachedId === profileId && win.contentView.children.includes(view)) {
@@ -157,11 +157,11 @@ export class WebviewManager extends EventEmitter {
 
   /** Detaches whatever is currently attached (suspension primitive). */
   detach(): void {
-    const win = this.window();
-    if (!win || !this.attachedId) return;
+    if (!this.attachedId) return;
+    const win = this.liveWindow();
     const view = this.views.get(this.attachedId);
     this.attachedId = null;
-    if (view && win.contentView.children.includes(view)) {
+    if (win && view && win.contentView.children.includes(view)) {
       win.contentView.removeChildView(view);
     }
   }
@@ -171,15 +171,19 @@ export class WebviewManager extends EventEmitter {
    * untouched — recreating the view later restores the logged-in page.
    */
   destroy(profileId: string): void {
-    const win = this.window();
+    const win = this.liveWindow();
     const view = this.views.get(profileId);
     if (!view) return;
-    if (win) win.contentView.removeChildView(view);
+    if (win && win.contentView.children.includes(view)) win.contentView.removeChildView(view);
     if (this.attachedId === profileId) this.attachedId = null;
     this.views.delete(profileId);
     const wc = view.webContents;
-    this.wcProfile.delete(wc.id);
-    wc.removeAllListeners();
+    try {
+      this.wcProfile.delete(wc.id);
+      wc.removeAllListeners();
+    } catch {
+      /* WebContents already destroyed */
+    }
     try {
       // `close()` ends the page like closing a browser tab; fall back to GC
       // dereferencing on builds where it is unavailable.
@@ -192,19 +196,21 @@ export class WebviewManager extends EventEmitter {
 
   reloadActive(): void {
     if (!this.attachedId) return;
-    this.views.get(this.attachedId)?.webContents.reload();
+    const wc = this.views.get(this.attachedId)?.webContents;
+    if (wc && !wc.isDestroyed()) wc.reload();
   }
 
   toggleDevToolsActive(): void {
     if (!this.attachedId) return;
     const wc = this.views.get(this.attachedId)?.webContents;
-    if (!wc) return;
+    if (!wc || wc.isDestroyed()) return;
     if (wc.isDevToolsOpened()) wc.closeDevTools();
     else wc.openDevTools({ mode: 'detach' });
   }
 
   setMuted(profileId: string, muted: boolean): void {
-    this.views.get(profileId)?.webContents.setAudioMuted(muted);
+    const wc = this.views.get(profileId)?.webContents;
+    if (wc && !wc.isDestroyed()) wc.setAudioMuted(muted);
   }
 
   /**
@@ -220,7 +226,8 @@ export class WebviewManager extends EventEmitter {
 
   focusActive(): void {
     if (!this.attachedId) return;
-    this.views.get(this.attachedId)?.webContents.focus();
+    const wc = this.views.get(this.attachedId)?.webContents;
+    if (wc && !wc.isDestroyed()) wc.focus();
   }
 
   /** Which profile owns this webContents (null if unknown/untracked). */
@@ -235,6 +242,17 @@ export class WebviewManager extends EventEmitter {
       width: Math.max(1, this.bounds.width),
       height: Math.max(1, this.bounds.height),
     });
+  }
+
+  /**
+   * The shell window may have been destroyed while a WebContents event or
+   * timer is still in flight (e.g. render-process-gone during quit). Touching
+   * `win.contentView` on a destroyed BrowserWindow throws "Object has been
+   * destroyed", so every access goes through this live check.
+   */
+  private liveWindow(): BrowserWindow | null {
+    const win = this.window();
+    return win && !win.isDestroyed() ? win : null;
   }
 }
 

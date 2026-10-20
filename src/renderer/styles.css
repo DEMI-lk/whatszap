@@ -25,7 +25,7 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", system-ui, sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif;
   font-size: 14px;
   user-select: none;
 }
@@ -59,6 +59,35 @@ body { display: flex; flex-direction: column; }
 
 #topmenu { display: flex; gap: 2px; }
 #topmenu, #topmenu button { -webkit-app-region: no-drag; }
+
+/* ---------------------------------------------------- custom window controls
+   Linux only: frame:false removes native decorations and titleBarOverlay is
+   not available outside Windows/macOS, so the shell renders its own buttons.
+   Hidden by default; app.ts adds body.platform-linux after asking the main
+   process for the platform. */
+#win-controls {
+  display: none;
+  height: 100%;
+  margin-left: 4px;
+  -webkit-app-region: no-drag;
+}
+body.platform-linux #win-controls { display: flex; }
+body.platform-linux #topbar { padding-right: 2px; }
+#win-controls button {
+  width: 42px;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+#win-controls button:hover { background: var(--hover); color: var(--text); }
+#win-controls button#win-close:hover { background: #e81123; color: #fff; }
 
 #topmenu button, .menu button {
   background: transparent;

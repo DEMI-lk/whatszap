@@ -30,6 +30,14 @@ const updCheck = document.getElementById('upd-check') as HTMLButtonElement;
 const updInstall = document.getElementById('upd-install') as HTMLButtonElement;
 const updStatus = document.getElementById('upd-status') as HTMLParagraphElement;
 
+const winMin = document.getElementById('win-min') as HTMLButtonElement;
+const winMax = document.getElementById('win-max') as HTMLButtonElement;
+const winClose = document.getElementById('win-close') as HTMLButtonElement;
+const startupLabel = document.getElementById('set-startup-label') as HTMLElement;
+const topbar = document.getElementById('topbar') as HTMLElement;
+
+let isLinux = false;
+
 let profiles: ProfileInfo[] = [];
 let settings: AppSettings | null = null;
 let activeId: string | null = null;
@@ -489,11 +497,49 @@ function cycleProfile(dir: 1 | -1): void {
   api.selectProfile(next.id);
 }
 
+// -------------------------------------------------- Linux window controls
+
+function updateWinMax(maximized: boolean): void {
+  winMax.textContent = maximized ? '\u2750' : '\u25A1';
+  winMax.title = maximized ? 'Restore' : 'Maximize';
+  winMax.setAttribute('aria-label', winMax.title);
+}
+
+winMin.addEventListener('click', () => void api.minimizeWindow());
+winMax.addEventListener('click', () => {
+  void api.toggleMaximizeWindow().then(updateWinMax);
+});
+winClose.addEventListener('click', () => void api.closeWindow());
+api.onWindowState(updateWinMax);
+
+// Double-clicking the drag area maximises/restores, like a native title bar.
+// Only on Linux: Windows/macOS already get this from the OS chrome overlay.
+topbar.addEventListener('dblclick', (e) => {
+  if (!isLinux || (e.target as HTMLElement).closest('button')) return;
+  void api.toggleMaximizeWindow().then(updateWinMax);
+});
+
 btnAdd.addEventListener('click', () => openModal('new'));
 
 // -------------------------------------------------------------------- boot
 
 (async function boot() {
+  // Platform-specific chrome: Linux draws its own window buttons and uses
+  // "Start at login" (XDG autostart) instead of "Start with Windows".
+  try {
+    const platform = await api.getPlatformInfo();
+    isLinux = platform.platform === 'linux';
+    if (isLinux) document.body.classList.add('platform-linux');
+    startupLabel.textContent = platform.platform === 'win32' ? 'Start with Windows' : 'Start at login';
+    if (platform.platform !== 'win32') {
+      updInstall.textContent = 'Verify & show file';
+      updStatus.textContent =
+        'Automatic updates are Windows-only. On Linux, install new builds manually from GitHub Releases — or point the folder above at a latest.yml + file to verify a build.';
+    }
+  } catch {
+    /* keep Windows/default labels if the bridge is unavailable */
+  }
+
   settings = await api.getSettings();
   applyAccent(settings.accentColor || '#00a884');
   profiles = await api.getProfiles();

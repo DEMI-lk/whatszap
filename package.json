@@ -1,6 +1,7 @@
 {
   "name": "whatszap",
   "productName": "WhatsZAP",
+  "desktopName": "whatszap.desktop",
   "version": "1.2.5",
   "description": "Lightweight Electron desktop client for WhatsApp Web with multiple isolated persistent profiles.",
   "license": "MIT",
@@ -10,10 +11,13 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc && node scripts/copy-assets.cjs && node scripts/gen-icon.cjs",
-    "start": "npm run build && electron .",
-    "dev": "npm run build && electron .",
+    "start": "npm run build && node scripts/launch.cjs",
+    "dev": "npm run build && node scripts/launch.cjs",
     "watch": "tsc --watch",
-    "dist": "npm run build && electron-builder --win"
+    "dist": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb",
+    "dist:linux:dir": "npm run build && electron-builder --linux dir",
+    "install:linux": "npm run build && electron-builder --linux dir && node scripts/install-linux.cjs"
   },
   "devDependencies": {
     "electron": "^37.0.0",
@@ -42,6 +46,28 @@
         "portable"
       ],
       "icon": "assets/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "icon": "assets/icon.png",
+      "syncDesktopName": true,
+      "maintainer": "WhatsZAP contributors <whatszap@users.noreply.github.com>",
+      "synopsis": "Lightweight WhatsApp Web desktop client with isolated profiles",
+      "description": "Unofficial Electron client for WhatsApp Web with up to 10 isolated, persistent profiles.",
+      "desktop": {
+        "entry": {
+          "Name": "WhatsZAP",
+          "Comment": "WhatsApp Web desktop client with isolated profiles",
+          "Categories": "Network;InstantMessaging;"
+        }
+      }
+    },
+    "deb": {
+      "afterInstall": "scripts/deb-after-install.sh"
     },
     "nsis": {
       "oneClick": false,

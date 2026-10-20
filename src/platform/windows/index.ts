@@ -1,40 +1,19 @@
-import { app, Menu, nativeImage, Tray } from 'electron';
-import * as path from 'node:path';
+import { ElectronTrayProvider, TrayProvider } from '../tray-provider';
 
-/** Windows tray implementation. Minimal V1: Show + Exit. */
-export class WindowsTray {
+/**
+ * Windows tray implementation. Minimal V1: Show + Exit.
+ * Kept as its own class (and singleton accessor) because the Windows build
+ * uses the original 16px icon sizing expected by the notification area.
+ */
+export class WindowsTray extends ElectronTrayProvider implements TrayProvider {
   private static instance: WindowsTray | null = null;
-  private tray: Tray | null = null;
+
+  constructor() {
+    super(16, false);
+  }
 
   static get(): WindowsTray {
     if (!WindowsTray.instance) WindowsTray.instance = new WindowsTray();
     return WindowsTray.instance;
-  }
-
-  show(onShow: () => void, onExit: () => void): void {
-    if (this.tray) return;
-    // app.getAppPath() resolves to the app root both in dev and packaged
-    // builds (process.cwd() does NOT — installed apps launch elsewhere).
-    const iconPath = path.join(app.getAppPath(), 'assets', 'icon.png');
-    const image = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
-    if (image.isEmpty()) {
-      console.error(`[tray] icon failed to load: ${iconPath}`);
-    }
-
-    this.tray = new Tray(image);
-    this.tray.setToolTip('WhatsZAP');
-    this.tray.setContextMenu(
-      Menu.buildFromTemplate([
-        { label: 'Show WhatsZAP', click: onShow },
-        { type: 'separator' },
-        { label: 'Exit', click: onExit },
-      ]),
-    );
-    this.tray.on('double-click', onShow);
-  }
-
-  destroy(): void {
-    this.tray?.destroy();
-    this.tray = null;
   }
 }

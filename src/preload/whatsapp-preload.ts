@@ -56,7 +56,7 @@ class NotificationShim {
 const FONT_OVERRIDE_CSS = `
 .selectable-text,
 .selectable-text span {
-  font-family: "Nirmala UI", sans-serif !important;
+  font-family: "Nirmala UI", "Noto Sans Sinhala", "Iskoola Pota", "LKLUG", "Noto Sans", sans-serif !important;
   font-style: normal;
   font-weight: 400;
 }

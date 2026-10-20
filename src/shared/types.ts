@@ -73,6 +73,14 @@ export interface ContentBounds {
   height: number;
 }
 
+/** Renderer-visible platform descriptor (window chrome decisions). */
+export interface PlatformInfo {
+  platform: NodeJS.Platform;
+  /** Linux draws its own minimize/maximize/close buttons. */
+  customWindowControls: boolean;
+}
+
+
 export interface ResourceSample {
   totalRamMB: number;
   cpuPercent: number;
@@ -108,6 +116,10 @@ export const IPC = {
   toggleDevTools: 'actions:devtools',
   setViewVisible: 'webview:set-visible',
   exitApp: 'app:exit',
+  platformInfo: 'app:platform-info',
+  windowMinimize: 'window:minimize',
+  windowMaximizeToggle: 'window:maximize-toggle',
+  windowClose: 'window:close',
 } as const;
 
 /** Channels emitted main -> renderer. */
@@ -115,4 +127,5 @@ export const IPC_EVENTS = {
   snapshot: 'event:snapshot',
   resources: 'event:resources',
   updaterStatus: 'event:updater-status',
+  windowState: 'event:window-state',
 } as const;

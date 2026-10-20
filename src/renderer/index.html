@@ -20,6 +20,13 @@
       <button id="btn-settings" title="Settings">&#9881;</button>
       <button id="btn-more" title="More">&#8942;</button>
     </nav>
+    <!-- Linux has no native title-bar overlay (titleBarOverlay is
+         Windows/macOS only), so the shell draws its own controls. -->
+    <div id="win-controls">
+      <button id="win-min" title="Minimize" aria-label="Minimize">&#8211;</button>
+      <button id="win-max" title="Maximize" aria-label="Maximize">&#9723;</button>
+      <button id="win-close" title="Close" aria-label="Close">&#10005;</button>
+    </div>
   </header>
 
   <div id="layout">
@@ -78,7 +85,7 @@
         <h4>General</h4>
         <label class="row">
           <input type="checkbox" id="set-startup" />
-          Start with Windows
+          <span id="set-startup-label">Start with Windows</span>
         </label>
         <p class="hint">Starts hidden in the tray when you sign in.</p>
 

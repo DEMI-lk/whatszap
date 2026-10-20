@@ -1,9 +1,11 @@
-import { app, net } from 'electron';
+import { app, net, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { UpdaterInfo, UpdaterStatus } from '../shared/types';
+
+const IS_WINDOWS = process.platform === 'win32';
 
 interface UpdateManifest {
   version: string;
@@ -66,8 +68,9 @@ export class LocalUpdater {
   async check(): Promise<UpdaterInfo> {
     this.setStatus({ state: 'checking', message: 'Checking for updates…' });
 
-    // Channel 1: GitHub Releases.
-    if (this.githubRepo) {
+    // Channel 1: GitHub Releases (Windows installers only — Linux/macOS builds
+    // are published as AppImages/proper bundles and installed manually).
+    if (this.githubRepo && IS_WINDOWS) {
       try {
         const res = await net.fetch(
           `https://github.com/${this.githubRepo}/releases/latest/download/latest.yml`,
@@ -102,7 +105,12 @@ export class LocalUpdater {
     try {
       const manifest = this.readLocalManifest(dir);
       if (!manifest) {
-        this.setStatus({ state: 'error', message: `No updates found (GitHub unreachable, no latest.yml in ${dir}).` });
+        this.setStatus({
+          state: 'up-to-date',
+          message: IS_WINDOWS
+            ? `No updates found (GitHub unreachable, no latest.yml in ${dir}).`
+            : `v${app.getVersion()} — automatic updates are Windows-only; get Linux builds from GitHub Releases.`,
+        });
       } else if (this.isNewer(manifest.version, app.getVersion())) {
         this.pending = manifest;
         this.setStatus({
@@ -160,6 +168,27 @@ export class LocalUpdater {
       const hash = crypto.createHash('sha512').update(fs.readFileSync(target)).digest('base64');
       if (hash !== this.pending.sha512) {
         throw new Error('Installer checksum mismatch — file corrupted or tampered.');
+      }
+
+      // Linux/macOS: no silent installer pipeline. Keep the verified file,
+      // mark AppImages executable, and show it in the file manager so the user
+      // can install/relaunch manually.
+      if (!IS_WINDOWS) {
+        try {
+          if (target.endsWith('.AppImage')) fs.chmodSync(target, 0o755);
+        } catch {
+          /* chmod is best effort */
+        }
+        this.setStatus({
+          state: 'up-to-date',
+          message: `Verified v${this.pending.version}. Automatic install is Windows-only — the file was saved to ${target}.`,
+        });
+        try {
+          shell.showItemInFolder(target);
+        } catch {
+          /* non-fatal */
+        }
+        return;
       }
 
       // Remove Mark-of-the-Web (Zone.Identifier) so SmartScreen doesn't block

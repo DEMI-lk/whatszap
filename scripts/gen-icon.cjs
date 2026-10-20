@@ -1,11 +1,12 @@
-// Generates assets/icon.png (256x256) without external dependencies:
+// Generates assets/icon.png (512x512) without external dependencies:
 // a WhatsApp-green disc with a white speech-bubble "tail" and a phone glyph,
-// encoded as a valid PNG via zlib (Node built-in).
+// encoded as a valid PNG via zlib (Node built-in). 512px satisfies Linux
+// packaging (AppImage/deb) and still scales down cleanly for the Windows tray.
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const SIZE = 256;
+const SIZE = 512;
 const CX = SIZE / 2;
 const CY = SIZE / 2 - 6;
 const R = SIZE * 0.42;
@@ -100,9 +101,23 @@ const png = Buffer.concat([
 const outDir = path.join(__dirname, '..', 'assets');
 fs.mkdirSync(outDir, { recursive: true });
 const outPath = path.join(outDir, 'icon.png');
-if (!fs.existsSync(outPath)) {
+
+// Read PNG IHDR dimensions (width/height are the first two 32-bit fields
+// after the 8-byte signature + 4-byte length + 4-byte "IHDR").
+function pngSize(file) {
+  try {
+    const buf = fs.readFileSync(file);
+    if (buf.length < 24 || buf.toString('ascii', 12, 16) !== 'IHDR') return null;
+    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+  } catch {
+    return null;
+  }
+}
+
+const existing = fs.existsSync(outPath) ? pngSize(outPath) : null;
+if (existing && existing.width >= 512 && existing.height >= 512) {
+  console.log('[gen-icon] icon already exists');
+} else {
   fs.writeFileSync(outPath, png);
   console.log('[gen-icon] wrote', outPath);
-} else {
-  console.log('[gen-icon] icon already exists');
 }

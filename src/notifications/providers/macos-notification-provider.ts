@@ -1,10 +1,15 @@
 import { Notification } from 'electron';
 import { NotificationPayload, NotificationProvider } from './notification-provider';
 
-/** Placeholder until macOS support lands (V2). */
+/** macOS: Electron's NSUserNotification/UNUserNotificationCenter bridge. */
 export class MacOSNotificationProvider implements NotificationProvider {
-  show(_payload: NotificationPayload): void {
-    // Intentionally unimplemented in V1.
-    void Notification.isSupported();
+  show(payload: NotificationPayload): void {
+    const n = new Notification({
+      title: payload.title,
+      body: payload.body,
+      silent: false,
+    });
+    if (payload.onClick) n.on('click', () => payload.onClick?.());
+    n.show();
   }
 }

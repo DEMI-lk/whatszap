@@ -19,8 +19,10 @@
 > The app itself is open source — you can audit the code and build it yourself with `npm install && npm run dist`. Code signing is planned once the project can justify the certificate cost; the build pipeline is already signing-ready.
 
 Lightweight, open-source **Electron desktop client for WhatsApp Web** with
-multiple isolated, persistent profiles. Windows-first (Linux/macOS ready via a
-platform abstraction layer). Inspired by Linux clients like ZapZap.
+multiple isolated, persistent profiles. Windows-first, with first-class Linux
+support (AppImage/.deb, per-user install, native notifications, tray and XDG
+autostart); macOS runs through the same platform abstraction layer. Inspired by
+Linux clients like ZapZap.
 
 ## Features (V1)
 
@@ -40,8 +42,11 @@ platform abstraction layer). Inspired by Linux clients like ZapZap.
   also disables the GPU process for the smallest footprint (takes effect after
   a restart).
 - Minimal shell: top bar with Profile / Settings / Reload / DevTools / Exit.
-- Settings: background mode (tray), Start with Windows, RAM/CPU limits, memory
-  mode, updates folder.
+- Settings: background mode (tray), Start with Windows / Start at login, RAM/CPU
+  limits, memory mode, updates folder.
+- Linux desktop integration: native notifications, StatusNotifier tray, XDG
+  autostart, window controls in the shell chrome, `.desktop` entry, and
+  AppImage + `.deb` packaging.
 - Sinhala chat text is pinned to the **Nirmala UI** font so it renders correctly
   on systems whose default UI font lacks Sinhala glyphs.
 - Secure by default: sandboxed renderers with no Node access to page content, a
@@ -74,6 +79,35 @@ Requires Node 18+ and npm.
 Or simply double-click **`run.bat`** — it installs dependencies if they're
 missing, builds, and launches the app (extra arguments are passed through, e.g.
 `run.bat --hidden`).
+
+### Linux
+
+```bash
+./run.sh                 # same as run.bat: deps + build + launch
+npm run dist:linux       # AppImage + .deb into release/
+npm run install:linux    # build + per-user install (no sudo)
+node scripts/install-linux.cjs --uninstall
+```
+
+`install:linux` installs the unpacked app under `~/.local/share/whatszap`, a
+launcher at `~/.local/bin/whatszap`, a `.desktop` entry and an icon, so WhatsZAP
+appears in the app grid. `.deb` users can instead `sudo apt install
+./release/whatszap_<version>_amd64.deb`; the AppImage needs `libfuse2` (or
+`--appimage-extract-and-run`).
+
+Chromium on Linux needs its SUID sandbox helper (`chrome-sandbox`, root-owned,
+mode 4755) or unprivileged user namespaces. The dev launcher and the generated
+wrapper detect a missing SUID helper and fall back to `--no-sandbox`; to restore
+full renderer sandboxing run:
+
+```bash
+sudo chown root:root node_modules/electron/dist/chrome-sandbox
+sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+```
+
+Background mode on GNOME requires the AppIndicator extension to show the tray
+icon; without it, relaunching WhatsZAP restores the hidden window (single
+instance).
 
 See [BUG-REPORT.md](BUG-REPORT.md) for the current code review: findings,
 severity, fix status and how each fix was verified.
@@ -121,7 +155,8 @@ src/
 
 ### Where is my data?
 
-Under `%APPDATA%/WhatsZAP/`:
+On Windows, under `%APPDATA%/WhatsZAP/`; on Linux, under `~/.config/WhatsZAP/`
+(Electron's `userData` path):
 
 ```
 config/profiles.json     profile metadata (name/avatar)

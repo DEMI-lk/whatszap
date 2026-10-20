@@ -10,7 +10,7 @@ import { SettingsStore } from './settings-store';
 import { WindowManager } from './window-manager';
 import { BackgroundManager, ensureSingleInstance } from './background-manager';
 import { NotificationManager } from '../notifications/notification-manager';
-import { WindowsTray } from '../platform/windows';
+import { getPlatform } from '../platform';
 import { PopoutManager } from './popout-manager';
 import { LocalUpdater } from './updater';
 import { applyMemoryTuning } from './memory-tuning';
@@ -30,7 +30,9 @@ if (!isPrimaryInstance) {
   setTimeout(() => app.exit(0), 1000).unref?.();
 }
 
-app.setAppUserModelId('com.whatszap.app'); // required for Windows toasts
+// Windows requires an explicit AppUserModelID for toast notifications; the
+// call is a no-op elsewhere, but keep it on its native platform.
+if (process.platform === 'win32') app.setAppUserModelId('com.whatszap.app');
 
 // Present as plain Chrome everywhere (headers + navigator.userAgent) BEFORE
 // any session/window exists. WhatsApp Web refuses Electron-branded clients.
@@ -48,6 +50,10 @@ const windows = new WindowManager();
 const sessionManager = new SessionManager(profilesRoot);
 const webviews = new WebviewManager(() => windows.window, sessionManager);
 const notifications = new NotificationManager();
+// Platform layer: Windows keeps its tray/window behavior; Linux gets a
+// StatusNotifier tray, XDG autostart and native notifications.
+const platform = getPlatform();
+const tray = platform.createTray();
 
 let resources: ResourceManager;
 
@@ -90,16 +96,16 @@ const background = new BackgroundManager(
       // Suspend renderers while hidden; sessions persist on disk.
       profileManager.suspendAll();
       windows.window?.hide();
-      WindowsTray.get().show(
+      tray.show(
         () => {
-          WindowsTray.get().destroy();
+          tray.destroy();
           windows.toggle();
         },
         () => background.requestQuit(),
       );
     },
     restoreFromBackground: () => {
-      WindowsTray.get().destroy();
+      tray.destroy();
       windows.toggle();
     },
     exitApp: () => app.quit(),
@@ -136,17 +142,27 @@ function registerCoreIpc(): void {
     if (clean.startWithWindows !== undefined) applyLoginItem(updated.startWithWindows);
     return updated;
   });
+  windows.registerIpc();
   resources.registerIpc();
   ipcMain.handle(IPC.updaterInfo, () => updater.info());
   ipcMain.handle(IPC.updaterCheck, () => updater.check());
   ipcMain.handle(IPC.updaterInstall, () => updater.install());
 }
 
-/** Registers/unregisters the Windows sign-in launch entry (--hidden). */
+/** Registers/unregisters the OS sign-in launch entry (--hidden). */
 function applyLoginItem(enabled: boolean): void {
-  if (process.platform !== 'win32') return;
+  if (process.platform === 'linux') {
+    // XDG autostart: ~/.config/autostart/whatszap.desktop
+    platform.setAutostart?.(enabled);
+    return;
+  }
   try {
-    app.setLoginItemSettings({ openAtLogin: enabled, args: enabled ? ['--hidden'] : [] });
+    if (process.platform === 'darwin') {
+      app.setLoginItemSettings({ openAtLogin: enabled });
+    } else {
+      // Windows: extra args are passed through to the app on launch.
+      app.setLoginItemSettings({ openAtLogin: enabled, args: enabled ? ['--hidden'] : [] });
+    }
     console.info(`[startup] login item ${enabled ? 'enabled' : 'disabled'}`);
   } catch (err) {
     console.error('[startup] setLoginItemSettings failed:', err);
@@ -164,11 +180,16 @@ app.whenReady().then(async () => {
 
   registerCoreIpc();
 
-  // Keep the Windows login entry and the stored setting in sync. A stored
+  // Keep the OS login entry and the stored setting in sync. A stored
   // "on" with no OS entry (reinstall/update) gets re-registered; an entry
   // the user enabled externally gets adopted into settings.
   if (process.platform === 'win32') {
     const actual = app.getLoginItemSettings().openAtLogin;
+    const stored = settingsStore.get().startWithWindows;
+    if (stored && !actual) applyLoginItem(true);
+    else if (!stored && actual) settingsStore.update({ startWithWindows: true });
+  } else if (process.platform === 'linux') {
+    const actual = platform.isAutostartEnabled?.() ?? false;
     const stored = settingsStore.get().startWithWindows;
     if (stored && !actual) applyLoginItem(true);
     else if (!stored && actual) settingsStore.update({ startWithWindows: true });
@@ -215,7 +236,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   resources.stop();
-  WindowsTray.get().destroy();
+  tray.destroy();
   popouts.closeAll();
 });
 

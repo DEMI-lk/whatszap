@@ -27,14 +27,15 @@ export class PopoutManager {
 
   focus(profileId: string): void {
     const entry = this.entries.get(profileId);
-    if (!entry) return;
+    if (!entry || entry.win.isDestroyed()) return;
     if (entry.win.isMinimized()) entry.win.restore();
     entry.win.show();
     entry.win.focus();
   }
 
   isFocused(profileId: string): boolean {
-    return this.entries.get(profileId)?.win.isFocused() ?? false;
+    const win = this.entries.get(profileId)?.win;
+    return !!win && !win.isDestroyed() && win.isFocused();
   }
 
   open(profileId: string, view: WebContentsView, title: string, prevKeepAlive: boolean): void {
@@ -88,7 +89,8 @@ export class PopoutManager {
 
   /** Explicit close (tray/menu); the 'closed' event runs the return path. */
   close(profileId: string): void {
-    this.entries.get(profileId)?.win.close();
+    const win = this.entries.get(profileId)?.win;
+    if (win && !win.isDestroyed()) win.close();
   }
 
   closeAll(): void {

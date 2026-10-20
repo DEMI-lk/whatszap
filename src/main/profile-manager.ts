@@ -276,7 +276,7 @@ export class ProfileManager {
   }
 
   async pickAvatar(id: string): Promise<string | null> {
-    const win = this.window();
+    const win = this.liveWindow();
     if (!win) return null;
     const result = await dialog.showOpenDialog(win, {
       title: 'Choose avatar image',
@@ -571,7 +571,8 @@ export class ProfileManager {
     if (!rec) return;
 
     // Suppress only when the user is actively looking at this profile.
-    if (this.activeId === profileId && this.window()?.isFocused()) return;
+    const win = this.liveWindow();
+    if (this.activeId === profileId && win?.isFocused()) return;
     if (this.popouts?.isPopped(profileId) && this.popouts.isFocused(profileId)) return;
 
     const now = Date.now();
@@ -595,7 +596,7 @@ export class ProfileManager {
       this.popouts.focus(id);
       return;
     }
-    const win = this.window();
+    const win = this.liveWindow();
     if (win) {
       win.show();
       win.focus();
@@ -724,10 +725,16 @@ export class ProfileManager {
   }
 
   emitSnapshot(): void {
-    const win = this.window();
-    if (win && !win.isDestroyed()) {
+    const win = this.liveWindow();
+    if (win) {
       win.webContents.send(IPC_EVENTS.snapshot, this.snapshot());
     }
+  }
+
+  /** Window accessor that treats a closing/destroyed window as gone. */
+  private liveWindow(): BrowserWindow | null {
+    const win = this.window();
+    return win && !win.isDestroyed() ? win : null;
   }
 
   private emitSnapshotThrottled(): void {

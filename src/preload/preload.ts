@@ -29,12 +29,17 @@ const IPC = {
   toggleDevTools: 'actions:devtools',
   setViewVisible: 'webview:set-visible',
   exitApp: 'app:exit',
+  platformInfo: 'app:platform-info',
+  windowMinimize: 'window:minimize',
+  windowMaximizeToggle: 'window:maximize-toggle',
+  windowClose: 'window:close',
 } as const;
 
 const IPC_EVENTS = {
   snapshot: 'event:snapshot',
   resources: 'event:resources',
   updaterStatus: 'event:updater-status',
+  windowState: 'event:window-state',
 } as const;
 
 const api = {
@@ -79,6 +84,14 @@ const api = {
     ipcRenderer.invoke(IPC.setViewVisible, visible),
 
   exitApp: (): Promise<void> => ipcRenderer.invoke(IPC.exitApp),
+
+  getPlatformInfo: (): Promise<import('../shared/types').PlatformInfo> =>
+    ipcRenderer.invoke(IPC.platformInfo),
+  minimizeWindow: (): Promise<void> => ipcRenderer.invoke(IPC.windowMinimize),
+  toggleMaximizeWindow: (): Promise<boolean> => ipcRenderer.invoke(IPC.windowMaximizeToggle),
+  closeWindow: (): Promise<void> => ipcRenderer.invoke(IPC.windowClose),
+  onWindowState: (cb: (maximized: boolean) => void): (() => void) =>
+    subscribe(IPC_EVENTS.windowState, cb),
 
   onSnapshot: (cb: (profiles: ProfileInfo[]) => void): (() => void) =>
     subscribe(IPC_EVENTS.snapshot, cb),
